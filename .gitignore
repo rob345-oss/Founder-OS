@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/.turbo
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/dist/
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Debug
+*.log
+npm-debug.log*
+
+# Vercel
+.vercel
+
+# EAS
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*

@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Founder OS API",
+    "version": "0.1.0"
+  },
+  "servers": [{ "url": "/api/v1", "description": "Versioned API prefix (FastAPI)" }],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "health",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/ventures": {
+      "get": {
+        "summary": "List ventures",
+        "operationId": "listVentures",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Ventures" } }
+      },
+      "post": {
+        "summary": "Create venture",
+        "operationId": "createVenture",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "201": { "description": "Created" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

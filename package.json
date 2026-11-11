@@ -1,0 +1,21 @@
+{
+  "name": "founder-os",
+  "private": true,
+  "packageManager": "npm@10.9.0",
+  "workspaces": [
+    "apps/web",
+    "apps/marketing-ios",
+    "packages/ui",
+    "packages/contracts",
+    "packages/studio"
+  ],
+  "scripts": {
+    "lint": "npm run lint -w founder-os-web",
+    "typecheck": "npm run typecheck -w founder-os-web",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}
