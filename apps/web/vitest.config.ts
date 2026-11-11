@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@founder-os/studio": path.resolve(__dirname, "../../packages/studio/src/index.ts"),
     },
   },
 });

@@ -5,6 +5,8 @@ import {
   buildSequenceSegments,
   duplicateClipInstance,
   hydrateTimelineFromMediaIds,
+  refreshProjectDuration,
+  computeProjectDuration,
   removeClipInstance,
   reorderClipInstances,
   resolveSequenceTime,
@@ -17,6 +19,15 @@ function durations(map: Record<string, number | null>): Map<string, number | nul
 }
 
 describe("timeline ops", () => {
+  it("exports refreshProjectDuration and keeps duration in sync with computeProjectDuration", () => {
+    const d = durations({ a: 10, b: 5 });
+    const base = hydrateTimelineFromMediaIds("p1", "Test", "9:16", ["a", "b"], d);
+    const stale = { ...base, durationSeconds: 0 };
+    const refreshed = refreshProjectDuration(stale, d);
+    expect(refreshed.durationSeconds).toBe(computeProjectDuration(stale, d));
+    expect(refreshed.durationSeconds).toBe(15);
+  });
+
   it("hydrates ordered clips with sequential layout", () => {
     const d = durations({ a: 10, b: 5, c: 8 });
     const project = hydrateTimelineFromMediaIds("p1", "Test", "9:16", ["a", "b", "c"], d);
