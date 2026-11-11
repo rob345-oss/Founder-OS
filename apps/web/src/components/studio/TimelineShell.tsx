@@ -1,4 +1,19 @@
-export function TimelineShell({ demo = false }: { demo?: boolean }) {
+"use client";
+
+import { useState } from "react";
+
+import { readMediaDragData } from "@/lib/studio/drag";
+
+export function TimelineShell({
+  demo = false,
+  onDropMediaIds,
+  clipCount = 0,
+}: {
+  demo?: boolean;
+  onDropMediaIds?: (ids: string[]) => void;
+  clipCount?: number;
+}) {
+  const [dragOver, setDragOver] = useState(false);
   const clips = demo
     ? [
         { id: "1", label: "Hook — scam callback", width: "14%" },
@@ -26,7 +41,34 @@ export function TimelineShell({ demo = false }: { demo?: boolean }) {
             <span className="w-16 shrink-0 text-[10px] uppercase tracking-wider text-[var(--studio-text-tertiary)]">
               {track}
             </span>
-            <div className="relative h-10 flex-1 rounded-[var(--studio-radius-sm)] border border-[var(--studio-border)] bg-[var(--studio-bg-0)]">
+            <div
+              className={[
+                "relative h-10 flex-1 rounded-[var(--studio-radius-sm)] border bg-[var(--studio-bg-0)] transition-colors",
+                track === "Video" && dragOver
+                  ? "border-[var(--studio-accent)] bg-[var(--studio-accent-muted)]"
+                  : "border-[var(--studio-border)]",
+              ].join(" ")}
+              onDragOver={
+                track === "Video"
+                  ? (e) => {
+                      if (!readMediaDragData(e.dataTransfer)) return;
+                      e.preventDefault();
+                      setDragOver(true);
+                    }
+                  : undefined
+              }
+              onDragLeave={track === "Video" ? () => setDragOver(false) : undefined}
+              onDrop={
+                track === "Video"
+                  ? (e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const payload = readMediaDragData(e.dataTransfer);
+                      if (payload) onDropMediaIds?.(payload.ids);
+                    }
+                  : undefined
+              }
+            >
               {track === "Video" && clips.length > 0 ? (
                 <div className="absolute inset-y-1 left-2 flex gap-1">
                   {clips.map((clip) => (
@@ -42,7 +84,11 @@ export function TimelineShell({ demo = false }: { demo?: boolean }) {
                 </div>
               ) : (
                 <div className="flex h-full items-center px-3 text-[11px] text-[var(--studio-text-tertiary)]">
-                  {track === "Captions" ? "Captions track — coming soon" : "Drop clips here after import"}
+                  {track === "Captions"
+                    ? "Captions track — coming soon"
+                    : clipCount > 0
+                      ? `${clipCount} clip${clipCount === 1 ? "" : "s"} in sequence · drop more from Media Library`
+                      : "Drop clips from Media Library"}
                 </div>
               )}
             </div>

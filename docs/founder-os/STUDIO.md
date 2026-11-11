@@ -64,10 +64,19 @@ Override the root with `FOUNDER_OS_STUDIO_DATA_DIR`.
 
 AI Studio generate, export, templates, captions, timeline editing, cloud sync, multi-user collaboration.
 
-## Phase 2 suggestions
+## Phase 2A (this branch)
 
-1. FastAPI or worker-backed scan jobs + progress for large libraries.
+- Automated tests: `cd apps/web && npm run test:studio` (Vitest; optional FFmpeg fixtures when `ffmpeg` is on `PATH`).
+- Drag clips onto **collections** (sidebar) or the **editor timeline** drop zone.
+- **Offline / Missing** library filter; rescan marks absent files without deleting your ratings/tags.
+- **Reveal in Explorer** via `POST /api/studio/media/:id/reveal` (Windows/macOS only).
+- Context menu on grid items; arrow keys move selection; per-folder **Rescan**.
+- Timeline architecture: see [STUDIO_TIMELINE.md](./STUDIO_TIMELINE.md).
+
+## Phase 2B+ suggestions
+
+1. Worker-backed scan jobs for very large libraries.
 2. Transcript ingest (local Whisper) tied to `StudioMediaAiFields`.
-3. Non-destructive timeline project files linking media IDs.
+3. Persist `StudioTimelineProject` sidecars per project.
 4. FFmpeg render queue and export presets per platform.
 5. Opt-in Supabase sync of metadata (not raw video) for iOS review app.

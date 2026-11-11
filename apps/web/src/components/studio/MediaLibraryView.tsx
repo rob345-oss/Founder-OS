@@ -13,13 +13,16 @@ import {
   createProject,
   fetchStudioMedia,
   listCollections,
+  patchMedia,
   persistEditorQueue,
+  revealMediaInExplorer,
 } from "@/lib/studio/client-api";
 
 import { BulkActionBar } from "./BulkActionBar";
 import { CompareClipsModal } from "./CompareClipsModal";
 import { EmptyState } from "./EmptyState";
 import { LibraryNavPanel, type LibraryNavSelection } from "./LibraryNavPanel";
+import { MediaContextMenu, type MediaContextMenuAction } from "./MediaContextMenu";
 import { MediaGrid, MediaGridSkeleton } from "./MediaGrid";
 import { MediaInspector } from "./MediaInspector";
 import { MediaSourcesPanel } from "./MediaSourcesPanel";
@@ -45,6 +48,11 @@ export function MediaLibraryView() {
   const [collections, setCollections] = useState<StudioCollection[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [expanded, setExpanded] = useState<StudioMediaPublic | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    item: StudioMediaPublic;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
@@ -58,6 +66,7 @@ export function MediaLibraryView() {
     if (navSelection.type === "unreviewed") base.reviewStatus = "unreviewed";
     if (navSelection.type === "category") base.category = navSelection.category;
     if (navSelection.type === "collection") base.collectionId = navSelection.collectionId;
+    if (navSelection.type === "missing") base.missing = true;
     return base;
   }, [debouncedQuery, navSelection, sort]);
 
@@ -89,6 +98,7 @@ export function MediaLibraryView() {
       all: allItems.length,
       favorites: allItems.filter((m) => m.favorite).length,
       unreviewed: allItems.filter((m) => m.reviewStatus === "unreviewed").length,
+      missing: allItems.filter((m) => m.missing).length,
       byCategory,
     };
   }, [allItems]);
@@ -128,9 +138,17 @@ export function MediaLibraryView() {
           }),
         );
       }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!selected || !items.length) return;
+        e.preventDefault();
+        const idx = items.findIndex((m) => m.id === selected.id);
+        const nextIdx = e.key === "ArrowDown" ? Math.min(idx + 1, items.length - 1) : Math.max(idx - 1, 0);
+        setSelected(items[nextIdx] ?? selected);
+      }
       if (e.key === "Escape") {
         setExpanded(null);
         setCompareOpen(false);
+        setContextMenu(null);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -165,6 +183,9 @@ export function MediaLibraryView() {
           onSelect={setNavSelection}
           collections={collections}
           counts={counts}
+          onDropToCollection={(collectionId, mediaIds) => {
+            void bulkPatchMedia({ ids: mediaIds, collectionId }).then(() => load());
+          }}
         />
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -251,6 +272,10 @@ export function MediaLibraryView() {
                 onSelect={setSelected}
                 onToggleSelect={toggleSelect}
                 onOpen={setExpanded}
+                getDragIds={(item) =>
+                  selectedIds.has(item.id) && selectedIds.size > 1 ? [...selectedIds] : [item.id]
+                }
+                onContextMenu={(item, pos) => setContextMenu({ item, x: pos.x, y: pos.y })}
               />
             ) : (
               <MediaTable items={items} selectedId={selected?.id} onSelect={setSelected} />
@@ -313,6 +338,33 @@ export function MediaLibraryView() {
           onClose={() => setCompareOpen(false)}
           onMarkSelected={(id) => {
             void bulkPatchMedia({ ids: [id], patch: { reviewStatus: "selected" } }).then(() => load());
+          }}
+        />
+      ) : null}
+
+      {contextMenu ? (
+        <MediaContextMenu
+          item={contextMenu.item}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onAction={(action: MediaContextMenuAction) => {
+            const item = contextMenu.item;
+            if (action === "open") setExpanded(item);
+            if (action === "favorite") {
+              void patchMedia(item.id, { favorite: !item.favorite }).then(({ item: next }) => {
+                setSelected(next);
+                setItems((prev) => prev.map((m) => (m.id === next.id ? next : m)));
+              });
+            }
+            if (action === "add-editor") {
+              persistEditorQueue([item.id]);
+              void createProject(`Edit — ${item.fileName}`, [item.id]).then(({ project }) =>
+                router.push(`/studio/editor?projectId=${project.id}`),
+              );
+            }
+            if (action === "reveal") void revealMediaInExplorer(item.id);
+            if (action === "compare" && selectedIds.size >= 2) setCompareOpen(true);
           }}
         />
       ) : null}

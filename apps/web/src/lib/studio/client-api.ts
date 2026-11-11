@@ -69,6 +69,7 @@ export type MediaQuery = {
   collectionId?: string;
   sort?: "modified_desc" | "modified_asc" | "name" | "duration" | "size" | "rating";
   recent?: boolean;
+  missing?: boolean;
 };
 
 export function fetchStudioMedia(params?: MediaQuery): Promise<{ items: StudioMediaPublic[] }> {
@@ -82,6 +83,7 @@ export function fetchStudioMedia(params?: MediaQuery): Promise<{ items: StudioMe
   if (params?.collectionId) sp.set("collectionId", params.collectionId);
   if (params?.sort) sp.set("sort", params.sort);
   if (params?.recent) sp.set("recent", "1");
+  if (params?.missing) sp.set("missing", "1");
   const qs = sp.toString();
   return studioFetch(`/api/studio/media${qs ? `?${qs}` : ""}`);
 }
@@ -201,6 +203,10 @@ export function mediaStreamUrl(id: string): string {
 
 export function mediaThumbnailUrl(id: string): string {
   return `/api/studio/media/${id}/thumbnail`;
+}
+
+export function revealMediaInExplorer(id: string): Promise<{ ok: boolean; error?: string }> {
+  return studioFetch(`/api/studio/media/${id}/reveal`, { method: "POST" });
 }
 
 export const EDITOR_QUEUE_KEY = "founder-os-studio-editor-queue";

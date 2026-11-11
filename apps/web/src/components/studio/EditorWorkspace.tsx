@@ -13,7 +13,10 @@ import {
   mediaStreamUrl,
   mediaThumbnailUrl,
   readEditorQueue,
+  setProjectMedia,
+  persistEditorQueue,
 } from "@/lib/studio/client-api";
+import { writeMediaDragData } from "@/lib/studio/drag";
 import { formatDuration } from "@/lib/studio/format";
 
 import { EmptyState } from "./EmptyState";
@@ -51,6 +54,19 @@ export function EditorWorkspace() {
 
   const filtered = category === "all" ? media : media.filter((m) => m.category === category);
   const timelineClips = useMemo(() => (queueIds.length ? media.filter((m) => queueIds.includes(m.id)) : media), [media, queueIds]);
+
+  async function appendToTimeline(ids: string[]) {
+    const merged = [...new Set([...queueIds, ...ids])];
+    setQueueIds(merged);
+    persistEditorQueue(merged);
+    if (projectId) {
+      await setProjectMedia(projectId, merged);
+    }
+    setMedia((prev) => {
+      const map = new Map(prev.map((m) => [m.id, m]));
+      return merged.map((id) => map.get(id)).filter((m): m is StudioMediaPublic => Boolean(m));
+    });
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -131,6 +147,8 @@ export function EditorWorkspace() {
               <button
                 key={m.id}
                 type="button"
+                draggable
+                onDragStart={(e) => writeMediaDragData(e.dataTransfer, [m.id])}
                 onClick={() => setSelected(m)}
                 className={[
                   "mb-2 flex w-full gap-2 rounded-md border p-2 text-left text-xs",
@@ -196,7 +214,11 @@ export function EditorWorkspace() {
         </aside>
       </div>
 
-      <TimelineShell demo={demoTimeline} />
+      <TimelineShell
+        demo={demoTimeline}
+        clipCount={timelineClips.length}
+        onDropMediaIds={(ids) => void appendToTimeline(ids)}
+      />
     </div>
   );
 }

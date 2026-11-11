@@ -18,7 +18,7 @@ import {
   getScanJob,
   mediaIdForPath,
   readStudioIndex,
-  removeMediaNotInSet,
+  markMediaMissingNotInSet,
   getMediaById,
   updateScanJob,
   upsertDirectory,
@@ -236,7 +236,7 @@ export async function runScanJob(jobId: string): Promise<void> {
         updateScanJob(jobId, { processed, failed, added, updated });
       }
 
-      const removed = removeMediaNotInSet(dir.id, seenIds);
+      const removed = markMediaMissingNotInSet(dir.id, seenIds);
       removedTotal += removed;
       updateScanJob(jobId, { removed: removedTotal });
     }

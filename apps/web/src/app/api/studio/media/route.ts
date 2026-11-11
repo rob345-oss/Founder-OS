@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     | "size"
     | "rating";
   const recent = req.nextUrl.searchParams.get("recent");
+  const missing = req.nextUrl.searchParams.get("missing") === "1";
 
   let category: StudioContentCategory | undefined;
   if (categoryParam && (STUDIO_CONTENT_CATEGORIES as readonly string[]).includes(categoryParam)) {
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
     favorite: favorite || undefined,
     reviewStatus,
     collectionId,
+    missing: missing || undefined,
     sort,
     recentDays: recent === "1" ? 14 : undefined,
   });

@@ -11,6 +11,8 @@ import type { StudioMediaPublic } from "@/lib/studio/client-api";
 import { formatDuration } from "@/lib/studio/format";
 import { mediaThumbnailUrl } from "@/lib/studio/client-api";
 
+import { writeMediaDragData } from "@/lib/studio/drag";
+
 import { CategoryBadge } from "./CategoryBadge";
 
 const COLS_BY_SIZE = { sm: 6, md: 5, lg: 4, xl: 3 } as const;
@@ -23,6 +25,8 @@ export function MediaGrid({
   onSelect,
   onToggleSelect,
   onOpen,
+  onContextMenu,
+  getDragIds,
 }: {
   items: StudioMediaPublic[];
   selectedId?: string | null;
@@ -31,6 +35,8 @@ export function MediaGrid({
   onSelect?: (item: StudioMediaPublic) => void;
   onToggleSelect?: (item: StudioMediaPublic, additive: boolean) => void;
   onOpen?: (item: StudioMediaPublic) => void;
+  onContextMenu?: (item: StudioMediaPublic, position: { x: number; y: number }) => void;
+  getDragIds?: (item: StudioMediaPublic) => string[];
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const cols = COLS_BY_SIZE[thumbSize];
@@ -69,6 +75,8 @@ export function MediaGrid({
                   onSelect={() => onSelect?.(item)}
                   onToggleSelect={(additive) => onToggleSelect?.(item, additive)}
                   onDoubleOpen={() => onOpen?.(item)}
+                  onContextMenu={(pos) => onContextMenu?.(item, pos)}
+                  dragIds={getDragIds?.(item) ?? [item.id]}
                 />
               ))}
             </div>
@@ -86,6 +94,8 @@ function MediaGridCard({
   onSelect,
   onToggleSelect,
   onDoubleOpen,
+  onContextMenu,
+  dragIds,
 }: {
   item: StudioMediaPublic;
   selected: boolean;
@@ -93,17 +103,26 @@ function MediaGridCard({
   onSelect: () => void;
   onToggleSelect: (additive: boolean) => void;
   onDoubleOpen: () => void;
+  onContextMenu?: (position: { x: number; y: number }) => void;
+  dragIds: string[];
 }) {
   const thumb = item.thumbnailKey ? mediaThumbnailUrl(item.id) : null;
 
   return (
     <article
+      draggable
+      onDragStart={(e) => writeMediaDragData(e.dataTransfer, dragIds)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onSelect();
+        onContextMenu?.({ x: e.clientX, y: e.clientY });
+      }}
       className={[
-        "group relative overflow-hidden rounded-[var(--studio-radius-lg)] border text-left transition-[border-color,box-shadow]",
+        "group relative overflow-hidden rounded-[var(--studio-radius-lg)] border text-left transition-[border-color,box-shadow,transform] duration-[var(--studio-motion-fast)]",
         selected
           ? "border-[var(--studio-accent)] shadow-[0_0_0_1px_var(--studio-accent)]"
-          : "border-[var(--studio-border)] hover:border-[var(--studio-border-strong)]",
-        item.missing ? "opacity-60" : "",
+          : "border-[var(--studio-border)] hover:border-[var(--studio-border-strong)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.35)]",
+        item.missing ? "opacity-75 ring-1 ring-[var(--studio-danger)]/30" : "",
       ].join(" ")}
     >
       <button type="button" className="block w-full text-left" onClick={onSelect} onDoubleClick={onDoubleOpen}>
@@ -114,8 +133,8 @@ function MediaGridCard({
             <div className="absolute inset-0 bg-gradient-to-br from-[var(--studio-bg-3)] to-black" />
           )}
           {item.missing ? (
-            <span className="absolute left-2 top-2 rounded bg-[var(--studio-danger)]/90 px-1.5 py-0.5 text-[9px] font-medium text-white">
-              Missing
+            <span className="absolute inset-x-2 top-2 flex items-center gap-1 rounded-md border border-[var(--studio-danger)]/50 bg-black/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--studio-danger)]">
+              Offline file
             </span>
           ) : null}
           {item.durationSeconds != null ? (

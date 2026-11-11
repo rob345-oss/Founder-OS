@@ -169,20 +169,26 @@ export function upsertMediaItem(item: StudioMediaItem): void {
   });
 }
 
-export function removeMediaNotInSet(directoryId: string, keepIds: Set<string>): number {
+/** Marks indexed clips as offline when they disappear from disk (preserves tags and ratings). */
+export function markMediaMissingNotInSet(directoryId: string, keepIds: Set<string>): number {
   const db = getStudioDb();
   const rows = db
     .prepare("SELECT id FROM media WHERE directory_id = ?")
     .all(directoryId) as { id: string }[];
-  let removed = 0;
-  const del = db.prepare("DELETE FROM media WHERE id = ?");
+  let marked = 0;
+  const upd = db.prepare("UPDATE media SET missing = 1 WHERE id = ?");
   for (const { id } of rows) {
     if (!keepIds.has(id)) {
-      del.run(id);
-      removed += 1;
+      upd.run(id);
+      marked += 1;
     }
   }
-  return removed;
+  return marked;
+}
+
+/** @deprecated Use markMediaMissingNotInSet — kept for migrations/tests referencing the old name. */
+export function removeMediaNotInSet(directoryId: string, keepIds: Set<string>): number {
+  return markMediaMissingNotInSet(directoryId, keepIds);
 }
 
 export function setMediaTags(mediaId: string, tags: string[]): void {
@@ -272,6 +278,7 @@ export function queryMedia(filters: {
   favorite?: boolean;
   reviewStatus?: StudioReviewStatus;
   collectionId?: string;
+  missing?: boolean;
   ratingMin?: number;
   recentDays?: number;
   sort?: "modified_desc" | "modified_asc" | "name" | "duration" | "size" | "rating";
@@ -294,6 +301,9 @@ export function queryMedia(filters: {
   }
   if (filters.favorite) {
     clauses.push("m.favorite = 1");
+  }
+  if (filters.missing) {
+    clauses.push("m.missing = 1");
   }
   if (filters.reviewStatus) {
     clauses.push("m.review_status = @reviewStatus");

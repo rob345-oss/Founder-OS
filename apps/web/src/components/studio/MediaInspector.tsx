@@ -21,6 +21,7 @@ import {
   mediaThumbnailUrl,
   patchMedia,
   persistEditorQueue,
+  revealMediaInExplorer,
 } from "@/lib/studio/client-api";
 import { formatDuration, formatFileSize, formatRelativeTime } from "@/lib/studio/format";
 
@@ -266,12 +267,13 @@ export function MediaInspector({
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-[var(--studio-border)] px-2 py-2 text-[11px]"
-              title="Reveal in Explorer — copy path from source hint"
-              onClick={() => navigator.clipboard?.writeText(item.sourceHint)}
+              disabled={item.missing}
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-[var(--studio-border)] px-2 py-2 text-[11px] disabled:opacity-40"
+              title="Reveal in Explorer (local file only)"
+              onClick={() => void revealMediaInExplorer(item.id)}
             >
               <FolderOpen className="h-3.5 w-3.5" />
-              Copy source
+              Reveal
             </button>
           </div>
         </div>

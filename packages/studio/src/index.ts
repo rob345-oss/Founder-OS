@@ -200,6 +200,13 @@ export const STUDIO_CATEGORY_LABELS: Record<StudioContentCategory, string> = {
   other: "Other",
 };
 
+export type {
+  StudioTimelineClipInstance,
+  StudioTimelineProject,
+  StudioTimelineTrack,
+  StudioTimelineTrackKind,
+} from "./timeline";
+
 export const STUDIO_REVIEW_LABELS: Record<StudioReviewStatus, string> = {
   unreviewed: "Unreviewed",
   selected: "Selected take",

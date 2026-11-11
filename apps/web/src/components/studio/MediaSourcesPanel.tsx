@@ -94,6 +94,22 @@ export function MediaSourcesPanel({
     }
   }
 
+  async function scanFolder(directoryId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { jobId } = await scanMedia({ directoryId });
+      if (jobId) {
+        const { job: j } = await getScanStatus(jobId);
+        setJob(j);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Scan failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function scanAll() {
     setBusy(true);
     setError(null);
@@ -175,13 +191,21 @@ export function MediaSourcesPanel({
               <span className="text-[var(--studio-text-secondary)]">
                 {job.status === "running" ? "Indexing…" : `Scan ${job.status}`}
               </span>
-              {progressPct != null ? <span>{progressPct}%</span> : null}
+              {progressPct != null ? <span className="tabular-nums font-medium">{progressPct}%</span> : null}
             </div>
+            {progressPct != null ? (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--studio-bg-3)]">
+                <div
+                  className="h-full rounded-full bg-[var(--studio-accent)] transition-[width] duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            ) : null}
             {job.currentPath ? (
-              <p className="mt-1 truncate text-[var(--studio-text-tertiary)]">{job.currentPath}</p>
+              <p className="mt-1 truncate font-mono text-[10px] text-[var(--studio-text-tertiary)]">{job.currentPath}</p>
             ) : null}
             <p className="mt-2 text-[var(--studio-text-tertiary)]">
-              {job.processed}/{job.totalFiles} processed · +{job.added} new · {job.failed} failed
+              {job.processed}/{job.totalFiles} processed · +{job.added} new · {job.failed} failed · {job.removed} offline
             </p>
             {job.status === "running" ? (
               <button
@@ -226,14 +250,7 @@ export function MediaSourcesPanel({
                   {d.lastScannedAt ? ` · scanned ${new Date(d.lastScannedAt).toLocaleString()}` : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-[var(--studio-text-tertiary)] hover:text-[var(--studio-danger)]"
-                onClick={() => void remove(d.id)}
-                aria-label="Remove folder"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <DirectoryActions directoryId={d.id} busy={busy} onRescan={() => void scanFolder(d.id)} onRemove={() => void remove(d.id)} />
             </li>
           ))}
         </ul>
@@ -247,6 +264,41 @@ export function MediaSourcesPanel({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function DirectoryActions({
+  directoryId,
+  busy,
+  onRescan,
+  onRemove,
+}: {
+  directoryId: string;
+  busy: boolean;
+  onRescan: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded p-1 text-[var(--studio-text-tertiary)] hover:text-[var(--studio-accent)] disabled:opacity-40"
+        onClick={onRescan}
+        aria-label={`Rescan folder ${directoryId}`}
+        title="Rescan this folder"
+      >
+        <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
+      </button>
+      <button
+        type="button"
+        className="rounded p-1 text-[var(--studio-text-tertiary)] hover:text-[var(--studio-danger)]"
+        onClick={onRemove}
+        aria-label="Remove folder"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </div>
   );
 }

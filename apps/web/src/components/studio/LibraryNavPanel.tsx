@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import {
   Archive,
   ChevronLeft,
@@ -18,11 +19,14 @@ import {
 
 import { STUDIO_CATEGORY_LABELS, STUDIO_CONTENT_CATEGORIES, type StudioCollection } from "@founder-os/studio";
 
+import { readMediaDragData } from "@/lib/studio/drag";
+
 export type LibraryNavSelection =
   | { type: "all" }
   | { type: "recent" }
   | { type: "favorites" }
   | { type: "unreviewed" }
+  | { type: "missing" }
   | { type: "category"; category: (typeof STUDIO_CONTENT_CATEGORIES)[number] }
   | { type: "collection"; collectionId: string };
 
@@ -33,6 +37,7 @@ export function LibraryNavPanel({
   onSelect,
   collections,
   counts,
+  onDropToCollection,
 }: {
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -43,9 +48,12 @@ export function LibraryNavPanel({
     all: number;
     favorites: number;
     unreviewed: number;
+    missing: number;
     byCategory: Partial<Record<(typeof STUDIO_CONTENT_CATEGORIES)[number], number>>;
   };
+  onDropToCollection?: (collectionId: string, mediaIds: string[]) => void;
 }) {
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   return (
     <aside
       className={[
@@ -100,6 +108,14 @@ export function LibraryNavPanel({
           active={selection.type === "unreviewed"}
           onClick={() => onSelect({ type: "unreviewed" })}
         />
+        <NavItem
+          collapsed={collapsed}
+          icon={<Archive className="h-4 w-4" />}
+          label="Offline / Missing"
+          count={counts.missing}
+          active={selection.type === "missing"}
+          onClick={() => onSelect({ type: "missing" })}
+        />
         {!collapsed ? (
           <p className="mb-1 mt-4 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--studio-text-tertiary)]">
             Categories
@@ -132,14 +148,30 @@ export function LibraryNavPanel({
               Collections
             </p>
             {collections.map((c) => (
-              <NavItem
+              <div
                 key={c.id}
-                collapsed={collapsed}
-                icon={<FolderOpen className="h-4 w-4" />}
-                label={c.name}
-                active={selection.type === "collection" && selection.collectionId === c.id}
-                onClick={() => onSelect({ type: "collection", collectionId: c.id })}
-              />
+                onDragOver={(e) => {
+                  if (!readMediaDragData(e.dataTransfer)) return;
+                  e.preventDefault();
+                  setDropTarget(c.id);
+                }}
+                onDragLeave={() => setDropTarget((prev) => (prev === c.id ? null : prev))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDropTarget(null);
+                  const payload = readMediaDragData(e.dataTransfer);
+                  if (payload) onDropToCollection?.(c.id, payload.ids);
+                }}
+                className={dropTarget === c.id ? "rounded-[var(--studio-radius-md)] ring-2 ring-[var(--studio-accent)]" : ""}
+              >
+                <NavItem
+                  collapsed={collapsed}
+                  icon={<FolderOpen className="h-4 w-4" />}
+                  label={c.name}
+                  active={selection.type === "collection" && selection.collectionId === c.id}
+                  onClick={() => onSelect({ type: "collection", collectionId: c.id })}
+                />
+              </div>
             ))}
           </>
         ) : null}
