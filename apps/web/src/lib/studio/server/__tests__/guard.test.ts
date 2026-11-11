@@ -15,23 +15,14 @@ describe("studio guard", () => {
     expect(denied?.status).toBe(403);
   });
 
-  it("allows loopback without token in development", async () => {
-    const prevVercel = process.env.VERCEL;
-    const prevNode = process.env.NODE_ENV;
-    delete process.env.VERCEL;
-    process.env.NODE_ENV = "development";
-    try {
-      const req = new NextRequest("http://localhost:3000/api/studio/media", {
-        headers: { origin: "http://localhost:3000" },
-      });
-      const denied = assertStudioLocalRequest(req);
-      expect(denied).toBeNull();
-    } finally {
-      if (prevVercel === undefined) delete process.env.VERCEL;
-      else process.env.VERCEL = prevVercel;
-      if (prevNode === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = prevNode;
-    }
+  it("allows loopback without token in development", () => {
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("NODE_ENV", "development");
+    const req = new NextRequest("http://localhost:3000/api/studio/media", {
+      headers: { origin: "http://localhost:3000" },
+    });
+    const denied = assertStudioLocalRequest(req);
+    expect(denied).toBeNull();
   });
 
   it("rejects mismatched origin", () => {
