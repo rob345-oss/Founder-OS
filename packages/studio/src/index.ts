@@ -207,6 +207,31 @@ export type {
   StudioTimelineTrackKind,
 } from "./timeline";
 
+export {
+  DEFAULT_FRAME_RATE,
+  DEFAULT_VIDEO_TRACK_ID,
+  MIN_TRIM_SECONDS,
+  addMediaToTimeline,
+  buildSequenceSegments,
+  clipSequenceDuration,
+  computeProjectDuration,
+  createClipFromMedia,
+  duplicateClipInstance,
+  formatTimecode,
+  getPrimaryVideoTrack,
+  hydrateTimelineFromMediaIds,
+  layoutSequential,
+  newClipInstanceId,
+  removeClipInstance,
+  reorderClipInstances,
+  resolveSequenceTime,
+  refreshProjectDuration,
+  updateClipTrim,
+  validateClipTrim,
+  withPrimaryVideoClips,
+  type SequenceClipSegment,
+} from "./timeline-ops";
+
 export const STUDIO_REVIEW_LABELS: Record<StudioReviewStatus, string> = {
   unreviewed: "Unreviewed",
   selected: "Selected take",

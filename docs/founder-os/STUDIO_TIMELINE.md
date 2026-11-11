@@ -27,14 +27,14 @@ Clip instances are **not** the same as media items: the same hook take can appea
 - **Captions**: `extensions.captions[]` or dedicated captions track with text + time ranges.
 - **AI edits**: `extensions.aiEdits[]` stores proposals (cut points, B-roll suggestions) without applying them until the user accepts.
 
-## Editor shell today (Phase 2A)
+## Editor (Phase 2B)
 
-- `StudioProject.mediaIds` is an ordered **import queue** (browser + timeline drop target).
-- `TimelineShell` is visual only; dropping clips updates the queue and `PUT /api/studio/projects/:id/media`.
-- Full multitrack UI and FFmpeg render graph are explicitly out of scope until Phase 2B/3.
+- `projects.timeline_json` stores the full `StudioTimelineProject` (auto-saved).
+- First open without JSON hydrates from legacy `project_media` order (one full-length clip per id).
+- `TimelineEditor` is the interactive UI; `TimelineShell` remains unused legacy shell.
+- FFmpeg export graph is designed in [STUDIO_EXPORT.md](./STUDIO_EXPORT.md), not implemented.
 
-## Persistence plan (next phase)
+## Future
 
-1. On first open of a project in the editor, hydrate `StudioTimelineProject` from `mediaIds` (one full-length clip per id on track `video-1`).
-2. Save timeline mutations to SQLite (`project_timeline_json`) or sidecar JSON with schema version.
-3. Optional Supabase sync: timeline metadata only; never binary media.
+- Optional Supabase sync: timeline metadata only; never binary media.
+- Multitrack audio/captions editing and export worker (Phase 3).

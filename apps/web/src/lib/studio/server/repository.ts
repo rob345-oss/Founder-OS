@@ -11,6 +11,14 @@ import type {
   StudioProject,
   StudioReviewStatus,
   StudioScanJob,
+  StudioTimelineProject,
+} from "@founder-os/studio";
+import {
+  getPrimaryVideoTrack,
+  hydrateTimelineFromMediaIds,
+  layoutSequential,
+  refreshProjectDuration,
+  withPrimaryVideoClips,
 } from "@founder-os/studio";
 
 import { getStudioDb, rowToCollection, rowToDirectory, rowToMedia, rowToProject, rowToScanJob } from "./db";
@@ -410,6 +418,72 @@ export function setProjectMediaOrder(projectId: string, mediaIds: string[]): voi
     db.prepare("UPDATE projects SET last_edited_at = ? WHERE id = ?").run(new Date().toISOString(), projectId);
   });
   txn();
+}
+
+export function parseTimelineProject(raw: string | null | undefined): StudioTimelineProject | null {
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as StudioTimelineProject;
+    if (data.schemaVersion !== 1 || !data.projectId || !Array.isArray(data.tracks)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export function sourceDurationsForMediaIds(mediaIds: string[]): Map<string, number | null> {
+  const map = new Map<string, number | null>();
+  for (const id of mediaIds) {
+    map.set(id, getMediaById(id)?.durationSeconds ?? null);
+  }
+  return map;
+}
+
+export function sourceDurationsForTimeline(timeline: StudioTimelineProject): Map<string, number | null> {
+  const ids = new Set<string>();
+  for (const track of timeline.tracks) {
+    for (const clip of track.clips) ids.add(clip.sourceMediaId);
+  }
+  return sourceDurationsForMediaIds([...ids]);
+}
+
+export function normalizeTimelineForSave(
+  timeline: StudioTimelineProject,
+  sourceDurations: Map<string, number | null>,
+): StudioTimelineProject {
+  const relaid = layoutSequential(getPrimaryVideoTrack(timeline), sourceDurations);
+  const next = withPrimaryVideoClips(timeline, relaid);
+  return refreshProjectDuration(next, sourceDurations);
+}
+
+export function loadProjectTimeline(projectId: string): StudioTimelineProject | null {
+  const db = getStudioDb();
+  const row = db.prepare("SELECT * FROM projects WHERE id = ?").get(projectId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const project = rowToProject(db, row);
+  const stored = parseTimelineProject(row.timeline_json != null ? String(row.timeline_json) : null);
+  if (stored && stored.projectId === projectId) {
+    const durations = sourceDurationsForTimeline(stored);
+    return normalizeTimelineForSave(stored, durations);
+  }
+  const mediaIds = project.mediaIds ?? [];
+  const durations = sourceDurationsForMediaIds(mediaIds);
+  return hydrateTimelineFromMediaIds(projectId, project.title, project.aspectRatio, mediaIds, durations);
+}
+
+export function saveProjectTimeline(timeline: StudioTimelineProject): StudioTimelineProject {
+  const db = getStudioDb();
+  const durations = sourceDurationsForTimeline(timeline);
+  const normalized = normalizeTimelineForSave(timeline, durations);
+  const json = JSON.stringify(normalized);
+  db.prepare("UPDATE projects SET timeline_json = ?, last_edited_at = ? WHERE id = ?").run(
+    json,
+    new Date().toISOString(),
+    timeline.projectId,
+  );
+  const uniqueMediaOrder = [...new Set(normalized.tracks.flatMap((t) => (t.kind === "video" ? t.clips.map((c) => c.sourceMediaId) : [])))];
+  setProjectMediaOrder(timeline.projectId, uniqueMediaOrder);
+  return normalized;
 }
 
 export function getActiveScanJob(): StudioScanJob | null {

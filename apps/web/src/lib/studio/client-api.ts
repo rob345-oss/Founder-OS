@@ -6,6 +6,7 @@ import type {
   StudioProject,
   StudioReviewStatus,
   StudioScanJob,
+  StudioTimelineProject,
 } from "@founder-os/studio";
 
 export type { StudioContentCategory };
@@ -190,6 +191,20 @@ export function setProjectMedia(projectId: string, mediaIds: string[]): Promise<
   return studioFetch(`/api/studio/projects/${projectId}/media`, {
     method: "PUT",
     body: JSON.stringify({ mediaIds }),
+  });
+}
+
+export function fetchProjectTimeline(projectId: string): Promise<{ timeline: StudioTimelineProject }> {
+  return studioFetch(`/api/studio/projects/${projectId}/timeline`);
+}
+
+export function saveProjectTimeline(
+  projectId: string,
+  timeline: StudioTimelineProject,
+): Promise<{ timeline: StudioTimelineProject }> {
+  return studioFetch(`/api/studio/projects/${projectId}/timeline`, {
+    method: "PUT",
+    body: JSON.stringify({ timeline }),
   });
 }
 

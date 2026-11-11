@@ -16,7 +16,7 @@ import { ensureStudioDataDir, studioIndexPath } from "./data-dir";
 
 let dbInstance: Database.Database | null = null;
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export function studioDbPath(): string {
   return path.join(ensureStudioDataDir(), "studio.db");
@@ -152,8 +152,18 @@ function runMigrations(db: Database.Database): void {
   const row = db.prepare("SELECT value FROM schema_meta WHERE key = 'version'").get() as
     | { value: string }
     | undefined;
+  const currentVersion = row ? Number(row.value) : 0;
   if (!row) {
     db.prepare("INSERT INTO schema_meta (key, value) VALUES ('version', ?)").run(String(SCHEMA_VERSION));
+  }
+  if (currentVersion < 2) {
+    const cols = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "timeline_json")) {
+      db.exec("ALTER TABLE projects ADD COLUMN timeline_json TEXT");
+    }
+    db.prepare(
+      "INSERT INTO schema_meta (key, value) VALUES ('version', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run();
   }
 }
 
