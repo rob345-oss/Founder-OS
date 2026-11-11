@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertWithinStudioMediaRoot } from "./media-root";
+
 const WINDOWS_PREFIX = /^[a-zA-Z]:[\\/]/;
 
 export function safeRealpath(p: string): string {
@@ -64,5 +66,6 @@ export function resolveMediaAbsolutePath(rootPath: string, relativePath: string)
   if (!isPathInsideRoot(rootPath, canonical)) {
     throw new Error("Path traversal blocked.");
   }
+  assertWithinStudioMediaRoot(canonical, "resolve_media_path");
   return canonical;
 }

@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 
 import { assertStudioLocalRequest } from "@/lib/studio/server/guard";
 import { pickWindowsFolder } from "@/lib/studio/server/folder-picker";
-import { validateDirectoryPath } from "@/lib/studio/server/paths";
+import { validateAuthorizedDirectoryRegistration } from "@/lib/studio/server/media-root";
 
 export async function POST(req: NextRequest) {
   const denied = assertStudioLocalRequest(req);
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ cancelled: true });
   }
 
-  const validation = validateDirectoryPath(picked);
+  const validation = validateAuthorizedDirectoryRegistration(picked);
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }

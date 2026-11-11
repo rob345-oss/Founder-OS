@@ -232,6 +232,28 @@ export {
   type SequenceClipSegment,
 } from "./timeline-ops";
 
+export {
+  STUDIO_EXPORT_JOB_STATUSES,
+  STUDIO_EXPORT_PRESETS,
+  STUDIO_EXPORT_PRESET_IDS,
+  STUDIO_EXPORT_QUALITY_CRF,
+  STUDIO_EXPORT_QUALITY_IDS,
+  type StudioExportJob,
+  type StudioExportJobSettings,
+  type StudioExportJobStatus,
+  type StudioExportPreset,
+  type StudioExportPresetId,
+  type StudioExportQualityId,
+} from "./export";
+
+export {
+  buildExportPlanFromTimeline,
+  buildFilterComplex,
+  sanitizeExportFileName,
+  type ExportPlanSegment,
+  type ExportRenderPlan,
+} from "./export-plan";
+
 export const STUDIO_REVIEW_LABELS: Record<StudioReviewStatus, string> = {
   unreviewed: "Unreviewed",
   selected: "Selected take",

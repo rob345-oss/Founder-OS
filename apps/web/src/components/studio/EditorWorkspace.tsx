@@ -20,6 +20,7 @@ import { formatDuration } from "@/lib/studio/format";
 import { useTimelineEditor } from "@/lib/studio/timeline/useTimelineEditor";
 
 import { EmptyState } from "./EmptyState";
+import { ExportModal } from "./ExportModal";
 import { SequenceVideoPreview } from "./SequenceVideoPreview";
 import { TimelineEditor } from "./TimelineEditor";
 
@@ -38,6 +39,7 @@ export function EditorWorkspace() {
   const [playing, setPlaying] = useState(false);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(48);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const editor = useTimelineEditor({
     projectId,
@@ -149,6 +151,26 @@ export function EditorWorkspace() {
         onRedo={editor.redo}
         snapEnabled={snapEnabled}
         onSnapToggle={setSnapEnabled}
+        onExport={() => setExportOpen(true)}
+        exportDisabled={!projectId || editor.clips.length === 0}
+      />
+
+      <ExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        projectId={projectId}
+        projectTitle={projectTitle}
+        estimatedDurationSeconds={editor.timeline?.durationSeconds ?? 0}
+        canExport={Boolean(projectId) && editor.clips.length > 0 && editor.saveState !== "saving"}
+        blockReason={
+          !projectId
+            ? "Open a saved project to export."
+            : editor.saveState === "saving"
+              ? "Wait for autosave to finish before exporting."
+              : editor.clips.length === 0
+                ? "Add clips to the timeline first."
+                : undefined
+        }
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -294,6 +316,8 @@ function EditorHeaderBar({
   onRedo,
   snapEnabled,
   onSnapToggle,
+  onExport,
+  exportDisabled,
 }: {
   projectTitle: string;
   clipCount: number;
@@ -304,6 +328,8 @@ function EditorHeaderBar({
   onRedo: () => void;
   snapEnabled: boolean;
   onSnapToggle: (v: boolean) => void;
+  onExport: () => void;
+  exportDisabled: boolean;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2">
@@ -338,9 +364,10 @@ function EditorHeaderBar({
         </label>
         <button
           type="button"
-          disabled
-          title="Export engine — see STUDIO_EXPORT.md"
-          className="rounded-md bg-[var(--studio-bg-3)] px-3 py-1.5 text-xs font-medium text-[var(--studio-text-tertiary)] opacity-70"
+          disabled={exportDisabled}
+          onClick={onExport}
+          title="Export MP4 with FFmpeg"
+          className="rounded-md bg-[var(--studio-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           Export
         </button>

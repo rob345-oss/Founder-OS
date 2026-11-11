@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 import { assertStudioLocalRequest } from "@/lib/studio/server/guard";
-import { validateDirectoryPath } from "@/lib/studio/server/paths";
+import {
+  getStudioMediaRootPublicSummary,
+  validateAuthorizedDirectoryRegistration,
+} from "@/lib/studio/server/media-root";
 import { toPublicDirectory } from "@/lib/studio/server/public-map";
 import {
   deleteDirectory,
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
   const snapshot = readStudioIndex();
   return NextResponse.json({
     directories: snapshot.directories.map(toPublicDirectory),
+    mediaRoot: getStudioMediaRootPublicSummary(),
   });
 }
 
@@ -29,7 +33,7 @@ export async function POST(req: NextRequest) {
   const denied = assertStudioLocalRequest(req);
   if (denied) return denied;
   const body = (await req.json()) as { path?: string; label?: string; scan?: boolean };
-  const validation = validateDirectoryPath(body.path ?? "");
+  const validation = validateAuthorizedDirectoryRegistration(body.path ?? "");
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }

@@ -15,7 +15,17 @@ export function ensureStudioDataDir(): string {
   const dir = getStudioDataDir();
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "thumbnails"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "exports"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "export-temp"), { recursive: true });
   return dir;
+}
+
+export function studioExportsDir(): string {
+  return path.join(ensureStudioDataDir(), "exports");
+}
+
+export function studioExportTempDir(): string {
+  return path.join(ensureStudioDataDir(), "export-temp");
 }
 
 export function studioIndexPath(): string {

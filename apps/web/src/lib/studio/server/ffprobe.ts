@@ -67,6 +67,58 @@ function emptyProbe(): VideoProbe {
   return { durationSeconds: null, width: null, height: null, frameRate: null, codec: null };
 }
 
+export async function probeHasAudio(filePath: string, ffprobePath = "ffprobe"): Promise<boolean> {
+  return new Promise((resolve) => {
+    const args = [
+      "-v",
+      "error",
+      "-select_streams",
+      "a:0",
+      "-show_entries",
+      "stream=codec_type",
+      "-of",
+      "csv=p=0",
+      filePath,
+    ];
+    const proc = spawn(ffprobePath, args, { windowsHide: true, shell: false });
+    let out = "";
+    proc.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    proc.on("error", () => resolve(false));
+    proc.on("close", (code) => resolve(code === 0 && out.trim().toLowerCase() === "audio"));
+  });
+}
+
+export async function probeOutputFile(
+  filePath: string,
+  ffprobePath = "ffprobe",
+): Promise<{ durationSeconds: number | null; sizeBytes: number | null }> {
+  return new Promise((resolve) => {
+    const args = ["-v", "error", "-show_entries", "format=duration,size", "-of", "json", filePath];
+    const proc = spawn(ffprobePath, args, { windowsHide: true, shell: false });
+    let out = "";
+    proc.on("error", () => resolve({ durationSeconds: null, sizeBytes: null }));
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        resolve({ durationSeconds: null, sizeBytes: null });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(out) as { format?: { duration?: string; size?: string } };
+        const d = parsed.format?.duration ? Number(parsed.format.duration) : null;
+        const size = parsed.format?.size ? Number(parsed.format.size) : null;
+        resolve({
+          durationSeconds: Number.isFinite(d) ? d : null,
+          sizeBytes: Number.isFinite(size) ? size : null,
+        });
+      } catch {
+        resolve({ durationSeconds: null, sizeBytes: null });
+      }
+    });
+  });
+}
+
 export async function extractThumbnail(filePath: string, outputPath: string): Promise<boolean> {
   return new Promise((resolve) => {
     const args = [

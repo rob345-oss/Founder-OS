@@ -1,6 +1,6 @@
 # Studio FFmpeg export design (Phase 2B prep)
 
-Export is **not implemented** in Phase 2B. This document defines how a future renderer turns `StudioTimelineProject` into FFmpeg operations.
+Phase 2C implements **local FFmpeg export**. This document describes the live renderer and job system.
 
 ## Job interface (proposed)
 

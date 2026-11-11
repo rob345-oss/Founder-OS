@@ -6,6 +6,9 @@ import type {
   StudioProject,
   StudioReviewStatus,
   StudioScanJob,
+  StudioExportJob,
+  StudioExportJobSettings,
+  StudioExportPresetId,
   StudioTimelineProject,
 } from "@founder-os/studio";
 
@@ -13,6 +16,13 @@ export type { StudioContentCategory };
 
 export type StudioDirectoryPublic = Omit<StudioAuthorizedDirectory, "rootPath"> & {
   rootLabel: string;
+};
+
+export type StudioMediaRootPublic = {
+  enforced: boolean;
+  ready: boolean;
+  displayName: string | null;
+  error: string | null;
 };
 
 export type StudioMediaPublic = StudioMediaItem & {
@@ -108,7 +118,10 @@ export function removeDirectory(id: string): Promise<{ ok: boolean }> {
   return studioFetch(`/api/studio/directories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function listDirectories(): Promise<{ directories: StudioDirectoryPublic[] }> {
+export function listDirectories(): Promise<{
+  directories: StudioDirectoryPublic[];
+  mediaRoot?: StudioMediaRootPublic;
+}> {
   return studioFetch("/api/studio/directories");
 }
 
@@ -229,6 +242,53 @@ export const EDITOR_QUEUE_KEY = "founder-os-studio-editor-queue";
 export function persistEditorQueue(mediaIds: string[]): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(EDITOR_QUEUE_KEY, JSON.stringify(mediaIds));
+}
+
+export function fetchFfmpegStatus(): Promise<{
+  available: boolean;
+  ffmpeg: string | null;
+  ffprobe: string | null;
+  hint: string;
+}> {
+  return studioFetch("/api/studio/exports/ffmpeg");
+}
+
+export function listExportJobs(): Promise<{ jobs: StudioExportJob[] }> {
+  return studioFetch("/api/studio/exports");
+}
+
+export function fetchExportJob(id: string): Promise<{ job: StudioExportJob }> {
+  return studioFetch(`/api/studio/exports/${id}`);
+}
+
+export function startExport(body: {
+  projectId: string;
+  presetId: StudioExportPresetId;
+  settings: StudioExportJobSettings;
+}): Promise<{ job: StudioExportJob }> {
+  return studioFetch("/api/studio/exports", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function cancelExportJob(id: string): Promise<{ job: StudioExportJob }> {
+  return studioFetch(`/api/studio/exports/${id}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "cancel" }),
+  });
+}
+
+export function pickExportDestination(): Promise<{ path?: string; cancelled?: boolean; error?: string }> {
+  return studioFetch("/api/studio/exports/pick-destination", { method: "POST" });
+}
+
+export function exportStreamUrl(jobId: string): string {
+  return `/api/studio/exports/${jobId}/stream`;
+}
+
+export function revealExportInExplorer(jobId: string): Promise<{ ok: boolean; error?: string }> {
+  return studioFetch(`/api/studio/exports/${jobId}/reveal`, { method: "POST" });
 }
 
 export function readEditorQueue(): string[] {

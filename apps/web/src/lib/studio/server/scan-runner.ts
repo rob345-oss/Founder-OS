@@ -11,6 +11,8 @@ import {
 
 import { thumbnailPath } from "./data-dir";
 import { extractThumbnail, probeVideoFile } from "./ffprobe";
+import { inferCategoryFromRelativePath } from "./category-heuristic";
+import { assertWithinStudioMediaRoot } from "./media-root";
 import { isPathInsideRoot } from "./paths";
 import {
   createScanJob,
@@ -95,6 +97,17 @@ export async function runScanJob(jobId: string): Promise<void> {
     const allFiles: { dir: StudioAuthorizedDirectory; files: MediaFile[] }[] = [];
     for (const dir of directories) {
       if (jobCancelled(jobId)) break;
+      try {
+        assertWithinStudioMediaRoot(dir.rootPath, "scan_directory");
+      } catch {
+        upsertDirectory({
+          ...dir,
+          inaccessible: true,
+          lastError: "Directory is outside the configured studio media root.",
+          lastScannedAt: now,
+        });
+        continue;
+      }
       if (!fs.existsSync(dir.rootPath)) {
         upsertDirectory({
           ...dir,
@@ -211,7 +224,10 @@ export async function runScanJob(jobId: string): Promise<void> {
           aspectRatio: aspectRatioLabel(width, height),
           frameRate,
           codec,
-          category: existing?.category ?? "other",
+          category:
+            existing?.category ??
+            inferCategoryFromRelativePath(relativeNorm) ??
+            "other",
           dateAdded: existing?.dateAdded ?? now,
           dateModified: mtime,
           dateIndexed: existing?.dateIndexed ?? now,

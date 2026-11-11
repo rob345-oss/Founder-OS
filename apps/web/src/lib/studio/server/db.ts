@@ -16,7 +16,7 @@ import { ensureStudioDataDir, studioIndexPath } from "./data-dir";
 
 let dbInstance: Database.Database | null = null;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function studioDbPath(): string {
   return path.join(ensureStudioDataDir(), "studio.db");
@@ -161,9 +161,38 @@ function runMigrations(db: Database.Database): void {
     if (!cols.some((c) => c.name === "timeline_json")) {
       db.exec("ALTER TABLE projects ADD COLUMN timeline_json TEXT");
     }
+  }
+  if (currentVersion < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS export_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        project_title TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        preset_id TEXT NOT NULL,
+        settings_json TEXT NOT NULL,
+        output_file_name TEXT NOT NULL,
+        output_dir TEXT NOT NULL,
+        output_path TEXT,
+        temp_output_path TEXT,
+        progress REAL NOT NULL DEFAULT 0,
+        progress_label TEXT,
+        error TEXT,
+        output_duration_seconds REAL,
+        output_size_bytes INTEGER,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_export_jobs_project ON export_jobs(project_id);
+      CREATE INDEX IF NOT EXISTS idx_export_jobs_created ON export_jobs(created_at DESC);
+    `);
+  }
+  if (currentVersion < SCHEMA_VERSION) {
     db.prepare(
-      "INSERT INTO schema_meta (key, value) VALUES ('version', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    ).run();
+      "INSERT INTO schema_meta (key, value) VALUES ('version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(String(SCHEMA_VERSION));
   }
 }
 

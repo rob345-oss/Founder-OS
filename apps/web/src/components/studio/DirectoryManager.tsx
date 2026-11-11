@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderPlus, RefreshCw } from "lucide-react";
 
-import type { StudioDirectoryPublic } from "@/lib/studio/client-api";
+import type { StudioDirectoryPublic, StudioMediaRootPublic } from "@/lib/studio/client-api";
 import { listDirectories, registerDirectory, scanMedia } from "@/lib/studio/client-api";
 
 import { EmptyState } from "./EmptyState";
@@ -16,6 +16,7 @@ export function DirectoryManager({
   onUpdated?: () => void;
 }) {
   const [directories, setDirectories] = useState(initialDirectories);
+  const [mediaRoot, setMediaRoot] = useState<StudioMediaRootPublic | null>(null);
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,9 +55,15 @@ export function DirectoryManager({
   }
 
   async function reloadDirs() {
-    const { directories: dirs } = await listDirectories();
+    const { directories: dirs, mediaRoot: root } = await listDirectories();
     setDirectories(dirs);
+    if (root) setMediaRoot(root);
   }
+
+  useEffect(() => {
+    void reloadDirs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load media root summary once on mount
+  }, []);
 
   return (
     <form
@@ -70,7 +77,11 @@ export function DirectoryManager({
         <div>
           <h3 className="text-sm font-medium text-[var(--studio-text-primary)]">Authorized media directories</h3>
           <p className="mt-1 text-xs text-[var(--studio-text-tertiary)]">
-            Only folders you add here are scanned. Paths are stored locally on this PC.
+            {mediaRoot?.enforced
+              ? mediaRoot.ready
+                ? `All scans are limited to subfolders inside ${mediaRoot.displayName ?? "your configured media root"}.`
+                : "Media root is configured but not accessible — fix FOUNDER_OS_STUDIO_MEDIA_ROOT in .env.local."
+              : "Only folders you add here are scanned. Set FOUNDER_OS_STUDIO_MEDIA_ROOT to lock access to one commercial folder."}
           </p>
         </div>
         <button
