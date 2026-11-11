@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Redo2, Save, Undo2 } from "lucide-react";
 
 import { STUDIO_CATEGORY_LABELS, STUDIO_CONTENT_CATEGORIES } from "@founder-os/studio";
 
 import type { StudioMediaPublic } from "@/lib/studio/client-api";
-import { fetchStudioMedia, mediaStreamUrl, mediaThumbnailUrl } from "@/lib/studio/client-api";
+import {
+  fetchStudioMedia,
+  listProjects,
+  mediaStreamUrl,
+  mediaThumbnailUrl,
+  readEditorQueue,
+} from "@/lib/studio/client-api";
 import { formatDuration } from "@/lib/studio/format";
 
 import { EmptyState } from "./EmptyState";
@@ -14,29 +21,45 @@ import { TimelineShell } from "./TimelineShell";
 import { VideoPreview } from "./VideoPreview";
 
 export function EditorWorkspace() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
   const [media, setMedia] = useState<StudioMediaPublic[]>([]);
+  const [projectTitle, setProjectTitle] = useState("Untitled sequence");
+  const [queueIds, setQueueIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<StudioMediaPublic | null>(null);
   const [category, setCategory] = useState<string>("all");
   const [demoTimeline, setDemoTimeline] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void fetchStudioMedia()
-      .then(({ items }) => {
-        setMedia(items);
-        if (items[0]) setSelected(items[0]);
+    const queue = readEditorQueue();
+    setQueueIds(queue);
+    void Promise.all([fetchStudioMedia(), listProjects()])
+      .then(([{ items }, { projects }]) => {
+        const project = projectId ? projects.find((p) => p.id === projectId) : undefined;
+        const ids = project?.mediaIds?.length ? project.mediaIds : queue.length ? queue : [];
+        const ordered = ids
+          .map((id) => items.find((m) => m.id === id))
+          .filter((m): m is StudioMediaPublic => Boolean(m));
+        const pool = ordered.length ? ordered : items;
+        setMedia(pool);
+        setProjectTitle(project?.title ?? "Untitled sequence");
+        if (pool[0]) setSelected(pool[0]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   const filtered = category === "all" ? media : media.filter((m) => m.category === category);
+  const timelineClips = useMemo(() => (queueIds.length ? media.filter((m) => queueIds.includes(m.id)) : media), [media, queueIds]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2">
         <div>
-          <p className="text-sm font-medium text-[var(--studio-text-primary)]">Untitled sequence</p>
-          <p className="text-[11px] text-[var(--studio-success)]">Saved locally · shell only</p>
+          <p className="text-sm font-medium text-[var(--studio-text-primary)]">{projectTitle}</p>
+          <p className="text-[11px] text-[var(--studio-success)]">
+            {timelineClips.length} clip{timelineClips.length === 1 ? "" : "s"} from Media Library · timeline shell
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button

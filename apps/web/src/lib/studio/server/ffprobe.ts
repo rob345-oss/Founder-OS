@@ -4,6 +4,8 @@ export type VideoProbe = {
   durationSeconds: number | null;
   width: number | null;
   height: number | null;
+  frameRate: number | null;
+  codec: string | null;
 };
 
 export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
@@ -14,7 +16,7 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=width,height",
+      "stream=width,height,avg_frame_rate,codec_name",
       "-show_entries",
       "format=duration",
       "-of",
@@ -34,7 +36,7 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
       }
       try {
         const parsed = JSON.parse(out) as {
-          streams?: { width?: number; height?: number }[];
+          streams?: { width?: number; height?: number; avg_frame_rate?: string; codec_name?: string }[];
           format?: { duration?: string };
         };
         const stream = parsed.streams?.[0];
@@ -43,6 +45,8 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
           durationSeconds: Number.isFinite(duration) ? duration : null,
           width: stream?.width ?? null,
           height: stream?.height ?? null,
+          frameRate: parseFrameRate(stream?.avg_frame_rate),
+          codec: stream?.codec_name ?? null,
         });
       } catch {
         resolve(emptyProbe());
@@ -51,8 +55,16 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
   });
 }
 
+function parseFrameRate(value?: string): number | null {
+  if (!value || value === "0/0") return null;
+  const [num, den] = value.split("/").map(Number);
+  if (!den || !Number.isFinite(num) || !Number.isFinite(den)) return null;
+  const fps = num / den;
+  return Number.isFinite(fps) ? Math.round(fps * 100) / 100 : null;
+}
+
 function emptyProbe(): VideoProbe {
-  return { durationSeconds: null, width: null, height: null };
+  return { durationSeconds: null, width: null, height: null, frameRate: null, codec: null };
 }
 
 export async function extractThumbnail(filePath: string, outputPath: string): Promise<boolean> {

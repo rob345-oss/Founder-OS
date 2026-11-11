@@ -24,11 +24,17 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const size = stat.size;
   const ext = item.fileName.split(".").pop()?.toLowerCase();
   const mime =
-    ext === "mov"
-      ? "video/quicktime"
-      : ext === "webm"
-        ? "video/webm"
-        : "video/mp4";
+    item.kind === "image"
+      ? ext === "png"
+        ? "image/png"
+        : ext === "webp"
+          ? "image/webp"
+          : "image/jpeg"
+      : ext === "mov"
+        ? "video/quicktime"
+        : ext === "webm"
+          ? "video/webm"
+          : "video/mp4";
 
   if (range) {
     const match = /bytes=(\d+)-(\d*)/.exec(range);

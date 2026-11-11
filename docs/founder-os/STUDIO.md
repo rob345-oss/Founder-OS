@@ -1,4 +1,4 @@
-# Founder OS Studio (Phase 1)
+# Founder OS Studio (Media Library 2.0)
 
 Premium local-first video production UI inside `apps/web`. Raw footage stays on disk; the browser talks to **Next.js route handlers on your machine** for indexing and streaming.
 
@@ -25,12 +25,21 @@ npm run start
 
 ## Local media workflow (works today)
 
-1. **Media Library** or **Overview** → authorize an absolute folder (e.g. `D:\Footage\Reels`).
-2. **Scan library** / **Refresh index** — recursively indexes `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`.
-3. Browse grid/list, preview video, assign **content category** (hook, body, CTA, etc.).
-4. **Editor** — preview selected indexed clips; timeline is shell-only (optional demo clips toggle).
+1. **Media Library** → **Add Media Folder** (Windows folder picker) or paste a path.
+2. Background indexing discovers video (MP4, MOV, M4V, WebM, MKV) and images (JPG, PNG, WebP); FFmpeg generates thumbnails when available.
+3. Browse the virtualized grid, inspect clips, set **category**, **tags**, **rating**, and **best-take** review status.
+4. **Collections**, multi-select bulk actions, and **Compare takes** (side-by-side for 2 clips).
+5. **Add to Video Editor** creates/updates a local project with ordered `mediaIds`; Editor loads that queue (timeline remains shell-only).
 
-Data directory (default): `%LOCALAPPDATA%\FounderOS\Studio` (`index.json` + `thumbnails/`). Override with `FOUNDER_OS_STUDIO_DATA_DIR`.
+Data directory (default): `%LOCALAPPDATA%\FounderOS\Studio`
+
+| File | Purpose |
+|------|---------|
+| `studio.db` | SQLite metadata (directories, media, tags, collections, projects, scan jobs) |
+| `index.json` | Legacy v1 store — migrated into SQLite on first run |
+| `thumbnails/` | Cached JPEG previews |
+
+Override the root with `FOUNDER_OS_STUDIO_DATA_DIR`.
 
 ## Security model
 

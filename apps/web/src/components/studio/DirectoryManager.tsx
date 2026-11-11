@@ -41,8 +41,10 @@ export function DirectoryManager({
     setError(null);
     setScanSummary(null);
     try {
-      const { result } = await scanMedia();
-      setScanSummary(`Indexed ${result.total} videos (+${result.added} new, ${result.updated} updated).`);
+      const { result } = await scanMedia({ wait: true });
+      if (result) {
+        setScanSummary(`Indexed ${result.total} videos (+${result.added} new, ${result.updated} updated).`);
+      }
       onUpdated?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed.");

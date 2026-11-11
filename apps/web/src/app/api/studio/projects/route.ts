@@ -7,10 +7,11 @@ import type { StudioProject } from "@founder-os/studio";
 import { assertStudioLocalRequest } from "@/lib/studio/server/guard";
 import {
   defaultProjectTitle,
+  insertProject,
   newProjectId,
   readStudioIndex,
-  writeStudioIndex,
-} from "@/lib/studio/server/store";
+  setProjectMediaOrder,
+} from "@/lib/studio/server/repository";
 
 export async function GET(req: NextRequest) {
   const denied = assertStudioLocalRequest(req);
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const denied = assertStudioLocalRequest(req);
   if (denied) return denied;
-  const body = (await req.json()) as { title?: string };
+  const body = (await req.json()) as { title?: string; mediaIds?: string[] };
   const now = new Date().toISOString();
   const project: StudioProject = {
     id: newProjectId(),
@@ -31,12 +32,14 @@ export async function POST(req: NextRequest) {
     status: "draft",
     targetPlatform: "instagram_reels",
     aspectRatio: "9:16",
-    thumbnailMediaId: null,
+    thumbnailMediaId: body.mediaIds?.[0] ?? null,
     lastEditedAt: now,
     createdAt: now,
+    mediaIds: body.mediaIds ?? [],
   };
-  const snapshot = readStudioIndex();
-  snapshot.projects.unshift(project);
-  writeStudioIndex(snapshot);
+  insertProject(project);
+  if (body.mediaIds?.length) {
+    setProjectMediaOrder(project.id, body.mediaIds);
+  }
   return NextResponse.json({ project });
 }

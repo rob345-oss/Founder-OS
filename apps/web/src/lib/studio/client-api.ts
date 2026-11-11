@@ -1,11 +1,13 @@
 import type {
   StudioAuthorizedDirectory,
+  StudioCollection,
   StudioContentCategory,
   StudioMediaItem,
   StudioProject,
+  StudioReviewStatus,
+  StudioScanJob,
 } from "@founder-os/studio";
 
-// Re-export for page consumers
 export type { StudioContentCategory };
 
 export type StudioDirectoryPublic = Omit<StudioAuthorizedDirectory, "rootPath"> & {
@@ -34,7 +36,6 @@ export type StudioOverviewPayload = {
   categoryCounts: Partial<Record<StudioContentCategory, number>>;
 };
 
-/** Optional client header — must match server STUDIO_LOCAL_TOKEN (NEXT_PUBLIC is not secret). */
 function studioHeaders(): HeadersInit {
   const token = process.env.NEXT_PUBLIC_STUDIO_LOCAL_TOKEN?.trim();
   const headers: HeadersInit = { "Content-Type": "application/json" };
@@ -58,40 +59,89 @@ export function fetchStudioOverview(): Promise<StudioOverviewPayload> {
   return studioFetch("/api/studio/overview");
 }
 
-export function fetchStudioMedia(params?: {
+export type MediaQuery = {
   q?: string;
   category?: StudioContentCategory;
   directoryId?: string;
-}): Promise<{ items: StudioMediaPublic[] }> {
+  kind?: "video" | "image";
+  favorite?: boolean;
+  reviewStatus?: StudioReviewStatus;
+  collectionId?: string;
+  sort?: "modified_desc" | "modified_asc" | "name" | "duration" | "size" | "rating";
+  recent?: boolean;
+};
+
+export function fetchStudioMedia(params?: MediaQuery): Promise<{ items: StudioMediaPublic[] }> {
   const sp = new URLSearchParams();
   if (params?.q) sp.set("q", params.q);
   if (params?.category) sp.set("category", params.category);
   if (params?.directoryId) sp.set("directoryId", params.directoryId);
+  if (params?.kind) sp.set("kind", params.kind);
+  if (params?.favorite) sp.set("favorite", "1");
+  if (params?.reviewStatus) sp.set("reviewStatus", params.reviewStatus);
+  if (params?.collectionId) sp.set("collectionId", params.collectionId);
+  if (params?.sort) sp.set("sort", params.sort);
+  if (params?.recent) sp.set("recent", "1");
   const qs = sp.toString();
   return studioFetch(`/api/studio/media${qs ? `?${qs}` : ""}`);
+}
+
+export function pickMediaFolder(): Promise<{ path?: string; cancelled?: boolean; error?: string }> {
+  return studioFetch("/api/studio/directories/pick", { method: "POST" });
 }
 
 export function registerDirectory(body: {
   path: string;
   label?: string;
-}): Promise<{ directory: StudioDirectoryPublic }> {
+  scan?: boolean;
+}): Promise<{ directory: StudioDirectoryPublic; scanJobId?: string }> {
   return studioFetch("/api/studio/directories", {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
 
+export function removeDirectory(id: string): Promise<{ ok: boolean }> {
+  return studioFetch(`/api/studio/directories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export function listDirectories(): Promise<{ directories: StudioDirectoryPublic[] }> {
   return studioFetch("/api/studio/directories");
 }
 
-export function scanMedia(): Promise<{ result: { added: number; updated: number; removed: number; total: number } }> {
-  return studioFetch("/api/studio/scan", { method: "POST" });
+export function scanMedia(opts?: {
+  directoryId?: string;
+  wait?: boolean;
+  cancelJobId?: string;
+}): Promise<{
+  result?: { added: number; updated: number; removed: number; total: number };
+  jobId?: string;
+  error?: string;
+}> {
+  return studioFetch("/api/studio/scan", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
+export function getScanStatus(jobId?: string): Promise<{ job: StudioScanJob | null }> {
+  const qs = jobId ? `?jobId=${encodeURIComponent(jobId)}` : "";
+  return studioFetch(`/api/studio/scan${qs}`);
 }
 
 export function patchMedia(
   id: string,
-  patch: { category?: StudioContentCategory; pipelineStage?: StudioMediaItem["pipelineStage"] },
+  patch: Partial<{
+    category: StudioContentCategory;
+    pipelineStage: StudioMediaItem["pipelineStage"];
+    favorite: boolean;
+    rating: number | null;
+    reviewStatus: StudioReviewStatus;
+    takeNumber: number | null;
+    notes: string;
+    tags: string[];
+    projectId: string | null;
+  }>,
 ): Promise<{ item: StudioMediaPublic }> {
   return studioFetch(`/api/studio/media/${id}`, {
     method: "PATCH",
@@ -99,10 +149,45 @@ export function patchMedia(
   });
 }
 
-export function createProject(title?: string): Promise<{ project: StudioProject }> {
+export function bulkPatchMedia(body: {
+  ids: string[];
+  patch?: {
+    category?: StudioContentCategory;
+    reviewStatus?: StudioReviewStatus;
+    favorite?: boolean;
+    rating?: number | null;
+    tags?: string[];
+  };
+  collectionId?: string;
+}): Promise<{ updated: StudioMediaPublic[]; errors: { id: string; error: string }[] }> {
+  return studioFetch("/api/studio/media/bulk", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listCollections(): Promise<{ collections: StudioCollection[] }> {
+  return studioFetch("/api/studio/collections");
+}
+
+export function createCollection(name: string, mediaIds?: string[]): Promise<{ collection: StudioCollection }> {
+  return studioFetch("/api/studio/collections", {
+    method: "POST",
+    body: JSON.stringify({ name, mediaIds }),
+  });
+}
+
+export function createProject(title?: string, mediaIds?: string[]): Promise<{ project: StudioProject }> {
   return studioFetch("/api/studio/projects", {
     method: "POST",
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, mediaIds }),
+  });
+}
+
+export function setProjectMedia(projectId: string, mediaIds: string[]): Promise<{ project: StudioProject }> {
+  return studioFetch(`/api/studio/projects/${projectId}/media`, {
+    method: "PUT",
+    body: JSON.stringify({ mediaIds }),
   });
 }
 
@@ -116,4 +201,22 @@ export function mediaStreamUrl(id: string): string {
 
 export function mediaThumbnailUrl(id: string): string {
   return `/api/studio/media/${id}/thumbnail`;
+}
+
+export const EDITOR_QUEUE_KEY = "founder-os-studio-editor-queue";
+
+export function persistEditorQueue(mediaIds: string[]): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(EDITOR_QUEUE_KEY, JSON.stringify(mediaIds));
+}
+
+export function readEditorQueue(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(EDITOR_QUEUE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
 }
