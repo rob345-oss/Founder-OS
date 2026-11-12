@@ -1,0 +1,38 @@
+{
+  "description": "Canonical Apple Developer and Expo identity for Founder OS iOS (marketing-ios). No secrets.",
+  "expo": {
+    "account": "robert_sicora",
+    "projectSlug": "founder-os-marketing",
+    "projectId": "f29123e5-7119-46f0-8eb3-05f7f8824048"
+  },
+  "appleDeveloper": {
+    "appleId": "robertdsicora@gmail.com",
+    "teamId": "T3KM8V39H7",
+    "teamNameHint": "Robert Sicora (Individual)"
+  },
+  "forbiddenAppleIdValues": [],
+  "forbiddenAppleIdEmailDomains": ["titaniumguardian.com"],
+  "tracks": {
+    "development": {
+      "appName": "Founder OS Dev",
+      "bundleIdentifier": "com.founderos.app.dev",
+      "easBuildProfile": "development",
+      "easUpdateChannel": "development",
+      "urlScheme": "founderos-dev"
+    },
+    "lab": {
+      "appName": "Founder OS Lab",
+      "bundleIdentifier": "com.founderos.app.lab",
+      "easBuildProfile": "preview-lab",
+      "easUpdateChannel": "preview-lab",
+      "urlScheme": "founderos-lab"
+    }
+  },
+  "isolation": {
+    "forbiddenExpoProjectIds": ["8e571169-1b49-4d9d-b466-9507ac05decf"],
+    "notes": "Do not modify Titanium Guardian Expo project or credentials."
+  },
+  "paths": {
+    "iosAppRelative": "apps/marketing-ios"
+  }
+}
