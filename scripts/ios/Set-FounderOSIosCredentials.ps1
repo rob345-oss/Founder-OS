@@ -10,7 +10,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Write-Host "Profile: $Profile — Apple login must use robertdsicora@gmail.com." -ForegroundColor Yellow
+Write-Host "Profile: $Profile - Apple login must use robertdsicora@gmail.com." -ForegroundColor Yellow
 & (Join-Path $PSScriptRoot 'Invoke-FounderOSIosEAS.ps1') -EasArgs @(
   'credentials:configure-build',
   '-p', 'ios',

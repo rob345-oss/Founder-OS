@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Placeholder for future App Store / production iOS builds — not wired in eas.json today.
+  Placeholder for future App Store / production iOS builds - not wired in eas.json today.
 
 .DESCRIPTION
   Founder OS marketing-ios currently defines development and preview-lab only.
@@ -29,7 +29,7 @@ if (-not $eas.build.$Profile) {
 . (Join-Path $PSScriptRoot 'Set-FounderOSAppleEnvironment.ps1')
 . (Join-Path $PSScriptRoot 'Assert-FounderOSAppleIdentity.ps1')
 
-Write-Host '>>> Production build path is configured — still requires explicit approval each time.' -ForegroundColor Yellow
+Write-Host '>>> Production build path is configured - still requires explicit approval each time.' -ForegroundColor Yellow
 Write-Host '>>> Apple ID: robertdsicora@gmail.com' -ForegroundColor Yellow
 
 & (Join-Path $PSScriptRoot 'Invoke-FounderOSIosEAS.ps1') -EasArgs @(
