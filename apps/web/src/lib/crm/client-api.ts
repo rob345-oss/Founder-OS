@@ -28,8 +28,9 @@ export type CrmSessionInfo = {
 };
 
 export async function fetchCrmSession(token: string | null): Promise<CrmSessionInfo> {
-  const res = await fetch("/api/crm/session", { headers: headers(token), cache: "no-store" });
-  return parseJson(res);
+  if (!token) return { authorized: false };
+  const { fetchCrmSessionDeduped } = await import("./session-fetch");
+  return fetchCrmSessionDeduped(token);
 }
 
 export async function fetchCrmDashboard(token: string | null, sync = false): Promise<CrmDashboardMetrics> {

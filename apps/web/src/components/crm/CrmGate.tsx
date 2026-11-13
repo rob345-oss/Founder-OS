@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { useCrmSession } from "./useCrmSession";
 
 export function CrmGate({ children }: { children: ReactNode }) {
-  const { loading, session, error, supabase } = useCrmSession();
+  const { loading, session, error, refresh, supabase } = useCrmSession();
 
   if (loading) {
     return (
@@ -26,13 +26,29 @@ export function CrmGate({ children }: { children: ReactNode }) {
         {error && (
           <p className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-xs text-red-200">{error}</p>
         )}
-        <button
-          type="button"
-          className="w-fit rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)]"
-          onClick={() => void supabase.auth.signInWithOAuth({ provider: "google" })}
-        >
-          Sign in
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="w-fit rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)]"
+            onClick={() =>
+              void supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: { redirectTo: `${window.location.origin}/crm` },
+              })
+            }
+          >
+            Sign in
+          </button>
+          {error ? (
+            <button
+              type="button"
+              className="w-fit rounded-lg border border-[var(--studio-border)] px-4 py-2 text-sm text-[var(--studio-text-secondary)] hover:bg-[var(--studio-bg-hover)]"
+              onClick={() => void refresh()}
+            >
+              Retry verification
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 
 import { CrmGate } from "@/components/crm/CrmGate";
+import { CrmSessionProvider } from "@/components/crm/CrmSessionProvider";
 import { CrmShell } from "@/components/crm/CrmShell";
 
 export const metadata: Metadata = {
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 export default function CrmLayout({ children }: { children: ReactNode }) {
   return (
     <CrmShell>
-      <CrmGate>{children}</CrmGate>
+      <CrmSessionProvider>
+        <CrmGate>{children}</CrmGate>
+      </CrmSessionProvider>
     </CrmShell>
   );
 }

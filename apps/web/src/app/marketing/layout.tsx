@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 
 import { MarketingGate } from "@/components/marketing/MarketingGate";
+import { MarketingSessionProvider } from "@/components/marketing/MarketingSessionProvider";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <MarketingShell>
-      <MarketingGate>{children}</MarketingGate>
+      <MarketingSessionProvider>
+        <MarketingGate>{children}</MarketingGate>
+      </MarketingSessionProvider>
     </MarketingShell>
   );
 }

@@ -7,8 +7,14 @@ function apiRoot(): string {
   return getCrmConfig().tgApiBaseUrl.replace(/\/$/, "");
 }
 
-async function tgFetch<T>(path: string, bearer: string, init?: RequestInit): Promise<FetchResult<T>> {
+async function tgFetch<T>(
+  path: string,
+  bearer: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<FetchResult<T>> {
   const cfg = getCrmConfig();
+  const timeout = timeoutMs ?? cfg.backendTimeoutMs;
   try {
     const res = await fetch(`${apiRoot()}${path}`, {
       ...init,
@@ -17,7 +23,7 @@ async function tgFetch<T>(path: string, bearer: string, init?: RequestInit): Pro
         Authorization: `Bearer ${bearer}`,
         ...(init?.headers ?? {}),
       },
-      signal: AbortSignal.timeout(cfg.backendTimeoutMs),
+      signal: init?.signal ?? AbortSignal.timeout(timeout),
       cache: "no-store",
     });
     if (!res.ok) {
@@ -38,7 +44,12 @@ export function isSuperAdminProfile(me: TgAuthMe): boolean {
 }
 
 export async function fetchTgAuthMe(bearer: string): Promise<FetchResult<TgAuthMe>> {
-  return tgFetch<TgAuthMe>("/v1/auth/me", bearer);
+  const cfg = getCrmConfig();
+  const authMeTimeout = Math.min(
+    cfg.backendTimeoutMs,
+    Number(process.env.CRM_AUTH_ME_TIMEOUT_MS ?? "8000"),
+  );
+  return tgFetch<TgAuthMe>("/v1/auth/me", bearer, undefined, authMeTimeout);
 }
 
 type LeadListResponse = { items?: TgLeadRecord[]; leads?: TgLeadRecord[]; total?: number };

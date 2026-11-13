@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     if (status === 401) {
       return Response.json({ authorized: false, error: "unauthorized" }, { status: 401 });
     }
-  const body = (await guard.response.json().catch(() => ({}))) as { error?: string; detail?: string };
+    const body = (await guard.response.json().catch(() => ({}))) as { error?: string; detail?: string };
     return Response.json(
       { authorized: false, error: body.error ?? "unavailable", detail: body.detail },
       { status: status >= 400 ? status : 503 },

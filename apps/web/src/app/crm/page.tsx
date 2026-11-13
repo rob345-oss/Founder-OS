@@ -40,7 +40,7 @@ export default function CrmOverviewPage() {
   );
 
   useEffect(() => {
-    void load(true);
+    void load(false);
   }, [load]);
 
   async function onSync() {

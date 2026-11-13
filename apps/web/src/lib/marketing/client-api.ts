@@ -26,8 +26,9 @@ export type MarketingSessionInfo = {
 };
 
 export async function fetchMarketingSession(token: string | null): Promise<MarketingSessionInfo> {
-  const res = await fetch("/api/marketing/session", { headers: headers(token), cache: "no-store" });
-  return parseJson(res);
+  if (!token) return { authorized: false };
+  const { fetchMarketingSessionDeduped } = await import("./session-fetch");
+  return fetchMarketingSessionDeduped(token);
 }
 
 export async function fetchMarketingOverview(
