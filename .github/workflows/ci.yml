@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   api:
@@ -44,6 +44,9 @@ jobs:
       - name: Studio tests
         working-directory: apps/web
         run: npm run test:studio
+      - name: CRM and Marketing tests
+        working-directory: apps/web
+        run: npx vitest run src/lib/crm/__tests__ src/lib/marketing/__tests__
       - name: Build web
         working-directory: apps/web
         run: npm run build
