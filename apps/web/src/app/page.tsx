@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getSummary, type DashboardSummary } from "@/lib/api";
+import { CrmHomeLink } from "@/components/crm/CrmHomeLink";
+import { MarketingHomeLink } from "@/components/marketing/MarketingHomeLink";
 
 export default function HomePage() {
   const supabase = createClient();
@@ -39,12 +41,16 @@ export default function HomePage() {
           Ventures, projects, and tasks — authenticated via Supabase; data from the Founder OS
           API.
         </p>
-        <a
-          href="/studio"
-          className="mt-5 inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
-        >
-          Open Founder OS Studio
-        </a>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a
+            href="/studio"
+            className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-900/60 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+          >
+            Open Founder OS Studio
+          </a>
+          <CrmHomeLink />
+          <MarketingHomeLink />
+        </div>
       </header>
 
       {!session && (
