@@ -8,6 +8,7 @@ import type {
   CrmActivity,
   CrmPipelineStage,
 } from "./types";
+import { readJsonBody } from "./http-json";
 
 function headers(token: string | null): HeadersInit {
   const h: HeadersInit = { Accept: "application/json" };
@@ -16,9 +17,7 @@ function headers(token: string | null): HeadersInit {
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as { error?: string } & T;
-  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-  return body;
+  return readJsonBody(res as Response) as Promise<T>;
 }
 
 export type CrmSessionInfo = {

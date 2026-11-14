@@ -5,6 +5,22 @@ function readEnv(name: string): string | undefined {
   return v?.trim() || undefined;
 }
 
+/** True for Vercel previews/production and explicit staging app env. */
+export function isHostedCrmDeployment(): boolean {
+  if (process.env.VERCEL === "1") return true;
+  if (readEnv("ENVIRONMENT") === "staging") return true;
+  if (readEnv("NEXT_PUBLIC_APP_ENV") === "staging") return true;
+  return (process.env.VERCEL_URL ?? "").includes("staging");
+}
+
+/** Prefer explicit CRM URLs; never fall back to generic DATABASE_URL on hosted CRM. */
+export function resolveCrmDatabaseUrl(): string | undefined {
+  const explicit = readEnv("CRM_DATABASE_URL") ?? readEnv("FOUNDER_OS_CRM_DATABASE_URL");
+  if (explicit) return explicit;
+  if (isHostedCrmDeployment()) return undefined;
+  return readEnv("DATABASE_URL");
+}
+
 export type CrmConfig = {
   databaseUrl: string | undefined;
   dataDir: string | undefined;
@@ -40,10 +56,7 @@ export function getCrmConfig(): CrmConfig {
   const syncIntervalMinutes = Number.isFinite(intervalRaw) && intervalRaw > 0 ? intervalRaw : 5;
 
   return {
-    databaseUrl:
-      readEnv("CRM_DATABASE_URL") ??
-      readEnv("FOUNDER_OS_CRM_DATABASE_URL") ??
-      readEnv("DATABASE_URL"),
+    databaseUrl: resolveCrmDatabaseUrl(),
     dataDir: readEnv("FOUNDER_OS_CRM_DATA_DIR"),
     tgApiBaseUrl: tgApiBaseUrl.replace(/\/$/, ""),
     backendTimeoutMs,
@@ -61,7 +74,9 @@ export function getCrmConfig(): CrmConfig {
 
 /** Staging/production hosts must not rely on loopback SQLite for CRM PII. */
 export function assertCrmPersistenceForHost(): void {
-  if (process.env.VERCEL === "1" && !getCrmConfig().databaseUrl) {
-    throw new Error("CRM_DATABASE_URL is required on Vercel (SQLite is not permitted for CRM).");
+  if (isHostedCrmDeployment() && !getCrmConfig().databaseUrl) {
+    throw new Error(
+      "CRM_DATABASE_URL is required on hosted CRM deployments (SQLite is not permitted). Configure staging Postgres in Vercel project settings.",
+    );
   }
 }

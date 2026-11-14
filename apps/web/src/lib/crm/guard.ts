@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { getCrmConfig } from "./config";
+import { sanitizeClientErrorDetail } from "./http-json";
 import { fetchTgAuthMe, isSuperAdminProfile } from "./tg-client";
 
 export type CrmPrincipal = {
@@ -38,7 +39,11 @@ export async function requireCrmSuperAdmin(req: NextRequest): Promise<CrmGuardRe
       return {
         ok: false,
         response: Response.json(
-          { error: "Unable to verify Titanium Guardian super_admin role.", detail: me.error },
+          {
+            error: "Unable to verify Titanium Guardian super_admin role.",
+            detail: me.error ? sanitizeClientErrorDetail(me.error) : undefined,
+            code: "auth_upstream_unavailable",
+          },
           { status: 503 },
         ),
       };
@@ -58,10 +63,10 @@ export async function requireCrmSuperAdmin(req: NextRequest): Promise<CrmGuardRe
       },
     };
   } catch (e) {
-    const detail = e instanceof Error ? e.message : "CRM auth failed";
+    const detail = sanitizeClientErrorDetail(e instanceof Error ? e.message : "CRM auth failed");
     return {
       ok: false,
-      response: Response.json({ error: "CRM authorization error.", detail }, { status: 503 }),
+      response: Response.json({ error: "CRM authorization error.", detail, code: "auth_internal_error" }, { status: 503 }),
     };
   }
 }

@@ -4,10 +4,10 @@ import path from "node:path";
 
 import Database from "better-sqlite3";
 
-import { getCrmConfig } from "@/lib/crm/config";
 import { ensureCrmDataDir } from "@/lib/crm/server/data-dir";
+import { withVerifiedPgClient } from "@/lib/crm/server/pg-client";
 
-import { getMarketingConfig } from "../config";
+import { assertMarketingPersistenceForHost, getMarketingConfig } from "../config";
 
 export type MarketingDbDriver = "sqlite" | "postgres";
 
@@ -77,6 +77,7 @@ export function getMarketingDriver(): MarketingDbDriver {
 }
 
 export function getMarketingSqlite(): Database.Database {
+  assertMarketingPersistenceForHost();
   if (sqliteInstance) return sqliteInstance;
   const dir = getMarketingConfig().dataDir ? path.resolve(getMarketingConfig().dataDir!) : ensureCrmDataDir();
   const dbPath = path.join(dir, "marketing_command_center.db");
@@ -95,28 +96,12 @@ export function getMarketingSqlite(): Database.Database {
   return db;
 }
 
-function toPgUrl(raw: string): string {
-  return raw.replace(/^postgresql\+asyncpg:/, "postgresql:").replace(/^postgres\+asyncpg:/, "postgres:");
-}
-
 export async function withMarketingPgClient<T>(
   fn: (query: (sql: string, params?: unknown[]) => Promise<unknown[]>) => Promise<T>,
 ): Promise<T> {
-  const url = getMarketingConfig().databaseUrl ?? getCrmConfig().databaseUrl;
+  const url = getMarketingConfig().databaseUrl;
   if (!url) throw new Error("MARKETING_DATABASE_URL / CRM_DATABASE_URL not configured");
-  const { Client } = await import("pg");
-  const client = new Client({ connectionString: toPgUrl(url), connectionTimeoutMillis: 8_000 });
-  await client.connect();
-  try {
-    await client.query("SET search_path TO founder_os, public");
-    const query = async (sql: string, params?: unknown[]) => {
-      const result = await client.query(sql, params);
-      return result.rows as unknown[];
-    };
-    return await fn(query);
-  } finally {
-    await client.end();
-  }
+  return withVerifiedPgClient(url, fn);
 }
 
 export function resetMarketingSqliteForTests(dbPath: string): Database.Database {

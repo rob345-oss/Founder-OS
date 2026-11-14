@@ -4,8 +4,9 @@ import path from "node:path";
 
 import Database from "better-sqlite3";
 
-import { getCrmConfig } from "../config";
+import { assertCrmPersistenceForHost, getCrmConfig } from "../config";
 import { ensureCrmDataDir } from "./data-dir";
+import { withVerifiedPgClient } from "./pg-client";
 
 export type CrmDbDriver = "sqlite" | "postgres";
 
@@ -149,6 +150,7 @@ export function getCrmDriver(): CrmDbDriver {
 }
 
 export function getCrmSqlite(): Database.Database {
+  assertCrmPersistenceForHost();
   if (sqliteInstance) return sqliteInstance;
   const dir = ensureCrmDataDir();
   const dbPath = path.join(dir, "crm.db");
@@ -177,24 +179,8 @@ export function resetCrmSqliteForTests(dbPath: string): Database.Database {
   return db;
 }
 
-function toPgUrl(raw: string): string {
-  return raw.replace(/^postgresql\+asyncpg:/, "postgresql:").replace(/^postgres\+asyncpg:/, "postgres:");
-}
-
 export async function withPgClient<T>(fn: (query: (sql: string, params?: unknown[]) => Promise<unknown[]>) => Promise<T>): Promise<T> {
   const url = getCrmConfig().databaseUrl;
   if (!url) throw new Error("CRM_DATABASE_URL not configured");
-  const { Client } = await import("pg");
-  const client = new Client({ connectionString: toPgUrl(url), connectionTimeoutMillis: 8_000 });
-  await client.connect();
-  try {
-    await client.query("SET search_path TO founder_os, public");
-    const query = async (sql: string, params?: unknown[]) => {
-      const result = await client.query(sql, params);
-      return result.rows as unknown[];
-    };
-    return await fn(query);
-  } finally {
-    await client.end();
-  }
+  return withVerifiedPgClient(url, fn);
 }

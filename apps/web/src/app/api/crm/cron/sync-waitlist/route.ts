@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { getCrmConfig } from "@/lib/crm/config";
+import { runCrmDataHandler } from "@/lib/crm/server/crm-route";
 import { resolveAutomatedSyncBearer, runAutomatedWaitlistSync } from "@/lib/crm/server/sync-runner";
 
 export const dynamic = "force-dynamic";
@@ -32,14 +33,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await runAutomatedWaitlistSync(syncBearer);
-  if (!result.ok) {
-    return Response.json({ error: result.error, runId: result.runId }, { status: result.status === 401 ? 401 : 502 });
-  }
-  return Response.json({
-    upserted: result.upserted,
-    created: result.created,
-    leadCount: result.leadCount,
-    runId: result.runId,
+  return runCrmDataHandler(async () => {
+    const result = await runAutomatedWaitlistSync(syncBearer);
+    if (!result.ok) {
+      return Response.json({ error: result.error, runId: result.runId }, { status: result.status === 401 ? 401 : 502 });
+    }
+    return Response.json({
+      upserted: result.upserted,
+      created: result.created,
+      leadCount: result.leadCount,
+      runId: result.runId,
+    });
   });
 }
