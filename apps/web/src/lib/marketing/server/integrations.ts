@@ -65,6 +65,6 @@ export function integrationsSummary(items: MarketingIntegrationStatus[]): { conn
 }
 
 export function isWebsiteAnalyticsLive(): boolean {
-  const cfg = getMarketingConfig();
+  void getMarketingConfig();
   return false; // No live GA pull yet — honest default
 }

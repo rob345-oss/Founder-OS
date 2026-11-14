@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Columns3, Contact2, LayoutDashboard, ListChecks, Mail, Users } from "lucide-react";
+import { ClipboardList, Columns3, LayoutDashboard, ListChecks, Mail, Users } from "lucide-react";
 
 export type CrmNavItem = {
   href: string;

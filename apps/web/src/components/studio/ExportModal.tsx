@@ -74,7 +74,6 @@ export function ExportModal({
     if (!projectId || !canExport) return;
     setError(null);
     try {
-      const preset = STUDIO_EXPORT_PRESETS[presetId];
       const { job } = await startExport({
         projectId,
         presetId,

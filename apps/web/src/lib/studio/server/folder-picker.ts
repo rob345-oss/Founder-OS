@@ -26,12 +26,12 @@ export function pickWindowsFolder(): Promise<string | null> {
       { windowsHide: true },
     );
     let out = "";
-    let err = "";
+    let _err = "";
     proc.stdout.on("data", (c: Buffer) => {
       out += c.toString();
     });
     proc.stderr.on("data", (c: Buffer) => {
-      err += c.toString();
+      _err += c.toString();
     });
     proc.on("error", () => resolve(null));
     proc.on("close", (code) => {

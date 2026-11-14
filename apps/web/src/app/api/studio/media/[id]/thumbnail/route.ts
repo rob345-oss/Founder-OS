@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { thumbnailPath } from "@/lib/studio/server/data-dir";
 import { assertStudioLocalRequest } from "@/lib/studio/server/guard";
-import { resolveIndexedMediaFile } from "@/lib/studio/server/media-file";
 import { findMedia, readStudioIndex } from "@/lib/studio/server/store";
 
 export const runtime = "nodejs";

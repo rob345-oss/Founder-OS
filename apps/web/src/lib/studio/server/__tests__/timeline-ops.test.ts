@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { StudioTimelineClipInstance, StudioTimelineProject } from "@founder-os/studio";
+import type { StudioTimelineClipInstance } from "@founder-os/studio";
 import {
   buildSequenceSegments,
   duplicateClipInstance,

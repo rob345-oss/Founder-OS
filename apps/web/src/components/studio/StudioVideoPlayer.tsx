@@ -81,7 +81,6 @@ export function StudioVideoPlayer({
   if (kind === "image") {
     return (
       <div className="relative overflow-hidden rounded-[var(--studio-radius-md)] border border-[var(--studio-border)] bg-black">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="max-h-[min(52vh,480px)] w-full object-contain" />
       </div>
     );
