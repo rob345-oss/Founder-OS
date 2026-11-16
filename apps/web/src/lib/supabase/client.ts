@@ -10,8 +10,10 @@ function resolveSupabaseBrowserConfig(): { url: string; key: string } {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (url && key) return { url, key };
 
-  const hostedBuild = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-  if (hostedBuild) {
+  // Allow SSR/prerender without public env; hosted browser code must not fall back to loopback OAuth.
+  const hostedRuntime =
+    typeof window !== "undefined" && (process.env.VERCEL === "1" || process.env.NODE_ENV === "production");
+  if (hostedRuntime && (!url || !key)) {
     throw new Error(
       "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set on deployed Founder OS builds.",
     );
