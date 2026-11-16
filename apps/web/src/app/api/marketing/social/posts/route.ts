@@ -13,18 +13,30 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const platform = sp.get("platform");
   const status = sp.get("status");
+  const statusesRaw = sp.get("statuses");
+  const statusList = statusesRaw
+    ? statusesRaw
+        .split(",")
+        .filter((s): s is SocialPostStatus => (SOCIAL_POST_STATUSES as readonly string[]).includes(s))
+    : undefined;
   const items = await listSocialPosts({
     platform:
       platform && (SOCIAL_PLATFORMS as readonly string[]).includes(platform)
         ? (platform as SocialPlatformId)
         : undefined,
     status:
-      status && (SOCIAL_POST_STATUSES as readonly string[]).includes(status)
-        ? (status as SocialPostStatus)
-        : undefined,
+      statusList?.length
+        ? statusList
+        : status && (SOCIAL_POST_STATUSES as readonly string[]).includes(status)
+          ? (status as SocialPostStatus)
+          : undefined,
+    campaignId: sp.get("campaignId") ?? undefined,
     search: sp.get("q") ?? undefined,
     limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
     offset: sp.get("offset") ? Number(sp.get("offset")) : undefined,
+    rangeFrom: sp.get("rangeFrom") ?? undefined,
+    rangeTo: sp.get("rangeTo") ?? undefined,
+    unscheduledOnly: sp.get("unscheduled") === "1",
   });
   return Response.json({ items });
 }

@@ -1,7 +1,13 @@
 import type { NextRequest } from "next/server";
 
 import { requireMarketingSuperAdmin } from "@/lib/marketing/guard";
-import { getSocialPost, updateSocialPost } from "@/lib/marketing/server/social-repository";
+import {
+  SocialPostConcurrencyError,
+  deleteSocialPostDraft,
+  duplicateSocialPost,
+  getSocialPost,
+  updateSocialPost,
+} from "@/lib/marketing/server/social-repository";
 import type { SocialPostStatus } from "@/lib/marketing/social-types";
 import { SOCIAL_POST_STATUSES } from "@/lib/marketing/social-types";
 
@@ -37,9 +43,42 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       destinationUrl: typeof body.destinationUrl === "string" ? body.destinationUrl : undefined,
       hashtags: typeof body.hashtags === "string" ? body.hashtags : undefined,
       topicTags: Array.isArray(body.topicTags) ? body.topicTags.map(String) : undefined,
+      campaignId: typeof body.campaignId === "string" ? body.campaignId : body.campaignId === null ? null : undefined,
+      expectedUpdatedAt: typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
     });
     return Response.json(updated);
   } catch (e) {
+    if (e instanceof SocialPostConcurrencyError) {
+      return Response.json({ error: e.message }, { status: 409 });
+    }
     return Response.json({ error: e instanceof Error ? e.message : "Update failed" }, { status: 400 });
+  }
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const guard = await requireMarketingSuperAdmin(req);
+  if (!guard.ok) return guard.response;
+  const { id } = await ctx.params;
+  try {
+    await deleteSocialPostDraft(id);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json({ error: e instanceof Error ? e.message : "Delete failed" }, { status: 400 });
+  }
+}
+
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const guard = await requireMarketingSuperAdmin(req);
+  if (!guard.ok) return guard.response;
+  const { id } = await ctx.params;
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (body.action !== "duplicate") {
+    return Response.json({ error: "Unsupported action" }, { status: 400 });
+  }
+  try {
+    const dup = await duplicateSocialPost(id);
+    return Response.json(dup, { status: 201 });
+  } catch (e) {
+    return Response.json({ error: e instanceof Error ? e.message : "Duplicate failed" }, { status: 400 });
   }
 }

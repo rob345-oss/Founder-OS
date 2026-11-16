@@ -126,14 +126,34 @@ export async function fetchSocialOverview(
   return parseJson(res);
 }
 
+export type SocialPostsQuery = {
+  q?: string;
+  status?: string;
+  statuses?: string[];
+  platform?: string;
+  campaignId?: string;
+  rangeFrom?: string;
+  rangeTo?: string;
+  unscheduled?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
 export async function fetchSocialPosts(
   token: string | null,
-  query: { q?: string; status?: string; platform?: string } = {},
+  query: SocialPostsQuery = {},
 ): Promise<SocialPostWithMetrics[]> {
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
   if (query.status) params.set("status", query.status);
+  if (query.statuses?.length) params.set("statuses", query.statuses.join(","));
   if (query.platform) params.set("platform", query.platform);
+  if (query.campaignId) params.set("campaignId", query.campaignId);
+  if (query.rangeFrom) params.set("rangeFrom", query.rangeFrom);
+  if (query.rangeTo) params.set("rangeTo", query.rangeTo);
+  if (query.unscheduled) params.set("unscheduled", "1");
+  if (query.limit != null) params.set("limit", String(query.limit));
+  if (query.offset != null) params.set("offset", String(query.offset));
   const q = params.toString() ? `?${params.toString()}` : "";
   const res = await fetch(`/api/marketing/social/posts${q}`, { headers: headers(token), cache: "no-store" });
   const body = await parseJson<{ items: SocialPostWithMetrics[] }>(res);
@@ -168,6 +188,26 @@ export async function updateSocialPostApi(
     body: JSON.stringify(body),
   });
   return parseJson(res);
+}
+
+export async function duplicateSocialPostApi(token: string | null, id: string): Promise<SocialPostWithMetrics> {
+  const res = await fetch(`/api/marketing/social/posts/${id}`, {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "duplicate" }),
+  });
+  return parseJson(res);
+}
+
+export async function deleteSocialPostApi(token: string | null, id: string): Promise<void> {
+  const res = await fetch(`/api/marketing/social/posts/${id}`, {
+    method: "DELETE",
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    const body = (await res.json()) as { error?: string };
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
 }
 
 export async function recordSocialPostMetrics(

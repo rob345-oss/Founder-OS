@@ -222,6 +222,12 @@ export type SocialPostListQuery = {
   search?: string;
   limit?: number;
   offset?: number;
+  /** Inclusive lower bound on scheduled_at or published_at (ISO). */
+  rangeFrom?: string;
+  /** Exclusive upper bound on scheduled_at or published_at (ISO). */
+  rangeTo?: string;
+  /** When true, only posts without scheduled_at (pipeline / unscheduled tray). */
+  unscheduledOnly?: boolean;
 };
 
 export async function listSocialPosts(query: SocialPostListQuery = {}): Promise<SocialPostWithMetrics[]> {
@@ -251,6 +257,19 @@ export async function listSocialPosts(query: SocialPostListQuery = {}): Promise<
         clauses.push(`(body_text ILIKE $${idx} OR internal_label ILIKE $${idx})`);
         params.push(`%${query.search.trim()}%`);
         idx++;
+      }
+      if (query.unscheduledOnly) {
+        clauses.push("scheduled_at IS NULL AND status NOT IN ('published', 'canceled')");
+      }
+      if (query.rangeFrom && query.rangeTo) {
+        clauses.push(
+          `(
+            (scheduled_at IS NOT NULL AND scheduled_at >= $${idx} AND scheduled_at < $${idx + 1})
+            OR (published_at IS NOT NULL AND published_at >= $${idx} AND published_at < $${idx + 1})
+          )`,
+        );
+        params.push(query.rangeFrom, query.rangeTo);
+        idx += 2;
       }
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
       params.push(limit, offset);
@@ -282,6 +301,16 @@ export async function listSocialPosts(query: SocialPostListQuery = {}): Promise<
     if (query.search?.trim()) {
       clauses.push("(body_text LIKE @search OR internal_label LIKE @search)");
       params.search = `%${query.search.trim()}%`;
+    }
+    if (query.unscheduledOnly) {
+      clauses.push("scheduled_at IS NULL AND status NOT IN ('published', 'canceled')");
+    }
+    if (query.rangeFrom && query.rangeTo) {
+      clauses.push(
+        "((scheduled_at IS NOT NULL AND scheduled_at >= @rangeFrom AND scheduled_at < @rangeTo) OR (published_at IS NOT NULL AND published_at >= @rangeFrom AND published_at < @rangeTo))",
+      );
+      params.rangeFrom = query.rangeFrom;
+      params.rangeTo = query.rangeTo;
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     rows = db
@@ -400,12 +429,32 @@ export async function createSocialPost(input: SocialPostInput): Promise<SocialPo
   return created;
 }
 
+export class SocialPostConcurrencyError extends Error {
+  constructor() {
+    super("Post was modified elsewhere. Refresh and try again.");
+    this.name = "SocialPostConcurrencyError";
+  }
+}
+
 export async function updateSocialPost(
   id: string,
-  patch: Partial<SocialPostInput> & { status?: SocialPostStatus; scheduledAt?: string | null },
+  patch: Partial<SocialPostInput> & {
+    status?: SocialPostStatus;
+    scheduledAt?: string | null;
+    expectedUpdatedAt?: string;
+  },
 ): Promise<SocialPostWithMetrics> {
   const existing = await getSocialPost(id);
   if (!existing) throw new Error("Post not found");
+  if (patch.expectedUpdatedAt && patch.expectedUpdatedAt !== existing.updatedAt) {
+    throw new SocialPostConcurrencyError();
+  }
+  if (existing.status === "published" && patch.scheduledAt !== undefined && patch.scheduledAt !== existing.scheduledAt) {
+    throw new Error("Cannot reschedule a published post");
+  }
+  if (existing.status === "published" && patch.publishedAt !== undefined && patch.publishedAt !== existing.publishedAt) {
+    throw new Error("Cannot change publication time of a published post");
+  }
   if (patch.status) {
     assertSocialStatusTransition(existing.status, patch.status);
     if (patch.status === "publishing" && !isMarketingPublishArmed()) {
@@ -568,5 +617,49 @@ export async function recordManualPostMetrics(postId: string, input: SocialManua
 }
 
 export async function updateSocialPostSchedule(id: string, scheduledAt: string | null): Promise<SocialPostWithMetrics> {
-  return updateSocialPost(id, { scheduledAt, status: scheduledAt ? "scheduled" : "approved" });
+  const existing = await getSocialPost(id);
+  if (!existing) throw new Error("Post not found");
+  if (existing.status === "published") throw new Error("Cannot reschedule a published post");
+  let nextStatus = existing.status;
+  if (scheduledAt) {
+    if (["draft", "approved", "in_review", "idea"].includes(existing.status)) nextStatus = "scheduled";
+  } else if (existing.status === "scheduled") {
+    nextStatus = "approved";
+  }
+  if (nextStatus !== existing.status) assertSocialStatusTransition(existing.status, nextStatus);
+  return updateSocialPost(id, { scheduledAt, status: nextStatus });
+}
+
+export async function duplicateSocialPost(id: string): Promise<SocialPostWithMetrics> {
+  const source = await getSocialPost(id);
+  if (!source) throw new Error("Post not found");
+  return createSocialPost({
+    platform: source.platform,
+    bodyText: source.bodyText,
+    internalLabel: source.internalLabel ? `${source.internalLabel} (copy)` : null,
+    campaignId: source.campaignId,
+    status: "draft",
+    scheduledAt: null,
+    destinationUrl: source.destinationUrl,
+    ctaText: source.ctaText,
+    hashtags: source.hashtags,
+    topicTags: source.topicTags,
+    mediaRefs: source.mediaRefs,
+    isManualTrackOnly: source.isManualTrackOnly,
+  });
+}
+
+export async function deleteSocialPostDraft(id: string): Promise<void> {
+  const existing = await getSocialPost(id);
+  if (!existing) throw new Error("Post not found");
+  if (!["idea", "draft", "in_review", "approved", "canceled", "failed"].includes(existing.status)) {
+    throw new Error("Only drafts and non-published posts can be deleted");
+  }
+  if (getMarketingDriver() === "postgres") {
+    await withMarketingPgClient(async (q) => {
+      await q("DELETE FROM marketing_social_posts WHERE id = $1", [id]);
+    });
+  } else {
+    getMarketingSqlite().prepare("DELETE FROM marketing_social_posts WHERE id = ?").run(id);
+  }
 }
