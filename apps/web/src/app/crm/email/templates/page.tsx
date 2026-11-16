@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { crmBtnPrimary } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { fetchEmailLabels, fetchEmailTemplates } from "@/lib/crm/email-client-api";
 import type { CrmEmailLabel, CrmEmailTemplate } from "@/lib/crm/email/types";
@@ -27,7 +28,7 @@ export default function EmailTemplatesPage() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Link href="/crm/email/templates/new" className="rounded-md bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white">
+        <Link href="/crm/email/templates/new" className={crmBtnPrimary}>
           New template
         </Link>
       </div>

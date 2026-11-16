@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
+import { crmBtnSecondary } from "@/components/crm/crmUi";
 import { MetricCard } from "@/components/crm/MetricCard";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { fetchCrmDashboard, syncCrmWaitlist } from "@/lib/crm/client-api";
@@ -72,7 +73,7 @@ export default function CrmOverviewPage() {
           type="button"
           disabled={syncing}
           onClick={() => void onSync()}
-          className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm font-medium text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)] disabled:opacity-60"
+          className={crmBtnSecondary}
         >
           {syncing ? "Syncing waitlist…" : "Sync waitlist"}
         </button>

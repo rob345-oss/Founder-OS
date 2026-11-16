@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
+import { crmBtnPrimarySm } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { addCrmNote, fetchCrmContact } from "@/lib/crm/client-api";
 import { fetchContactEmailActivity } from "@/lib/crm/email-client-api";
@@ -112,7 +113,7 @@ export default function CrmContactProfilePage() {
                 placeholder="Internal note…"
                 className="w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
               />
-              <button type="submit" className="rounded-md bg-[var(--studio-accent)] px-3 py-1.5 text-xs font-medium text-white">
+              <button type="submit" className={crmBtnPrimarySm}>
                 Add note
               </button>
             </form>

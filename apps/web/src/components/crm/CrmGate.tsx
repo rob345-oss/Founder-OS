@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { crmBtnPrimary, crmBtnSecondary } from "./crmUi";
 import { useCrmSession } from "./useCrmSession";
 
 export function CrmGate({ children }: { children: ReactNode }) {
@@ -29,7 +30,7 @@ export function CrmGate({ children }: { children: ReactNode }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="w-fit rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)]"
+            className={`w-fit ${crmBtnPrimary}`}
             onClick={() =>
               void supabase.auth.signInWithOAuth({
                 provider: "google",
@@ -42,7 +43,7 @@ export function CrmGate({ children }: { children: ReactNode }) {
           {error ? (
             <button
               type="button"
-              className="w-fit rounded-lg border border-[var(--studio-border)] px-4 py-2 text-sm text-[var(--studio-text-secondary)] hover:bg-[var(--studio-bg-hover)]"
+              className={`w-fit ${crmBtnSecondary}`}
               onClick={() => void refresh()}
             >
               Retry verification

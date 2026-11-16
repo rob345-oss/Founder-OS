@@ -27,9 +27,11 @@ body {
   --studio-text-primary: #f5f5f7;
   --studio-text-secondary: #a8a8b3;
   --studio-text-tertiary: #6e6e7a;
-  --studio-accent: #5b8cff;
-  --studio-accent-muted: rgba(91, 140, 255, 0.14);
-  --studio-accent-glow: rgba(91, 140, 255, 0.35);
+  --studio-accent: #4a7ce8;
+  --studio-accent-hover: #3d6ed9;
+  --studio-on-accent: #ffffff;
+  --studio-accent-muted: rgba(74, 124, 232, 0.18);
+  --studio-accent-glow: rgba(74, 124, 232, 0.35);
   --studio-success: #3dd68c;
   --studio-warning: #e8b339;
   --studio-danger: #f07178;
@@ -51,6 +53,39 @@ body {
 .studio-root *:focus-visible {
   outline: none;
   box-shadow: var(--studio-focus-ring);
+}
+
+.studio-root .studio-btn-primary {
+  background-color: var(--studio-accent);
+  color: var(--studio-on-accent);
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset;
+  transition: background-color var(--studio-motion-fast), filter var(--studio-motion-fast);
+}
+
+.studio-root .studio-btn-primary:hover:not(:disabled) {
+  background-color: var(--studio-accent-hover);
+}
+
+.studio-root .studio-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.studio-root .studio-btn-secondary {
+  color: var(--studio-text-primary);
+  background-color: var(--studio-bg-2);
+  border: 1px solid var(--studio-border-strong);
+  transition: background-color var(--studio-motion-fast);
+}
+
+.studio-root .studio-btn-secondary:hover:not(:disabled) {
+  background-color: var(--studio-bg-hover);
+}
+
+.studio-root .studio-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 @media (prefers-reduced-motion: reduce) {

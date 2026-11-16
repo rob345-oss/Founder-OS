@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { crmBtnPrimary, crmBtnSecondary } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import {
   fetchEmailLabels,
@@ -211,12 +212,12 @@ export default function NewEmailCampaignPage() {
       )}
 
       <div className="flex justify-between">
-        <button type="button" disabled={step === 0} onClick={() => setStep((s) => s - 1)} className="rounded-md border border-[var(--studio-border)] px-4 py-2 text-sm">
+        <button type="button" disabled={step === 0} onClick={() => setStep((s) => s - 1)} className={crmBtnSecondary}>
           Back
         </button>
         <button
           type="button"
-          className="rounded-md bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white"
+          className={crmBtnPrimary}
           onClick={() => {
             void (async () => {
               setError(null);

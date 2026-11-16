@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { crmBtnPrimary } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { fetchEmailSegments, saveEmailSegmentApi } from "@/lib/crm/email-client-api";
 import type { AudienceFilter, CrmEmailSegment } from "@/lib/crm/email/types";
@@ -44,7 +45,7 @@ export default function EmailAudiencePage() {
         </select>
         <button
           type="button"
-          className="mt-4 rounded-md bg-[var(--studio-accent)] px-4 py-2 text-sm text-white"
+          className={`mt-4 ${crmBtnPrimary}`}
           onClick={() => {
             if (!token || !name.trim()) return;
             void saveEmailSegmentApi(token, { name, filter: { mode, requireMarketingConsent: true } }).then(load);

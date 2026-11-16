@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { crmBtnPrimary } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { fetchEmailCampaigns, fetchEmailOverview } from "@/lib/crm/email-client-api";
 import type { CrmEmailCampaign, CrmEmailOverviewMetrics } from "@/lib/crm/email/types";
@@ -44,7 +45,7 @@ export default function CrmEmailOverviewPage() {
         </div>
         <Link
           href="/crm/email/campaigns/new"
-          className="rounded-md bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white"
+          className={crmBtnPrimary}
         >
           New campaign
         </Link>

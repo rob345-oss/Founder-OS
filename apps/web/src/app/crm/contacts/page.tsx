@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { crmBtnPrimary, crmBtnPrimarySm } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { createCrmContact, fetchCrmContacts } from "@/lib/crm/client-api";
 import type { CrmContactListItem } from "@/lib/crm/types";
@@ -51,7 +52,7 @@ export default function CrmContactsPage() {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="rounded-lg bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white"
+          className={crmBtnPrimary}
         >
           Add contact
         </button>
@@ -124,7 +125,7 @@ export default function CrmContactsPage() {
 function MotionButtons({ onCancel }: { onCancel: () => void }) {
   return (
     <div className="mt-3 flex gap-2">
-      <button type="submit" className="rounded-md bg-[var(--studio-accent)] px-3 py-1.5 text-xs font-medium text-white">
+      <button type="submit" className={crmBtnPrimarySm}>
         Save
       </button>
       <button type="button" onClick={onCancel} className="rounded-md border border-[var(--studio-border)] px-3 py-1.5 text-xs">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { crmBtnPrimary } from "@/components/crm/crmUi";
 import type { EmailBlock, EmailLocale } from "@/lib/crm/email/types";
 import { defaultEmailBlocks, renderBlocksToHtml, renderBlocksToText } from "@/lib/crm/email/blocks";
 import { applyPersonalization } from "@/lib/crm/email/personalize";
@@ -190,7 +191,7 @@ export function EmailComposer({ labels, initial, onSave }: Props) {
           type="button"
           disabled={saving}
           onClick={() => void handleSave()}
-          className="rounded-md bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className={crmBtnPrimary}
         >
           {saving ? "Saving…" : "Save template"}
         </button>
