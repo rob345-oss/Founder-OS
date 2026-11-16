@@ -54,6 +54,7 @@ export function mapContactRow(row: ContactRow): CrmContact {
     relationshipStatus: String(row.relationship_status) as CrmContact["relationshipStatus"],
     pipelineStage: String(row.pipeline_stage) as CrmContact["pipelineStage"],
     assignedOwnerId: row.assigned_owner_id ? String(row.assigned_owner_id) : null,
+    profile: parseJsonObject(row.contact_preferences),
     tags: parseJsonArray(row.tags),
     marketingConsent:
       row.marketing_consent === null || row.marketing_consent === undefined

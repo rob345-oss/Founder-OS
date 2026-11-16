@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { requireCrmSuperAdmin } from "@/lib/crm/guard";
-import { createContact, listContacts } from "@/lib/crm/server/repository";
+import { parseContactWriteBody } from "@/lib/crm/server/contact-payload";
+import { addNote, createContact, listContacts } from "@/lib/crm/server/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -31,24 +32,16 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const body = (await req.json()) as Record<string, unknown>;
-  if (typeof body.primaryEmail !== "string" || !body.primaryEmail.includes("@")) {
+  const parsed = parseContactWriteBody(body);
+  if (Object.keys(parsed.validationErrors).length) {
+    return Response.json({ error: "Validation failed", fields: parsed.validationErrors }, { status: 422 });
+  }
+  if (!parsed.input.primaryEmail) {
     return Response.json({ error: "primaryEmail is required" }, { status: 422 });
   }
-  const contact = await createContact(
-    {
-      fullName: typeof body.fullName === "string" ? body.fullName : "",
-      primaryEmail: body.primaryEmail,
-      additionalEmails: Array.isArray(body.additionalEmails) ? body.additionalEmails.map(String) : [],
-      phone: typeof body.phone === "string" ? body.phone : null,
-      countryCode: typeof body.countryCode === "string" ? body.countryCode : null,
-      organization: typeof body.organization === "string" ? body.organization : null,
-      contactSource: typeof body.contactSource === "string" ? body.contactSource : "manual",
-      classifications: Array.isArray(body.classifications) ? (body.classifications as never[]) : undefined,
-      relationshipStatus: typeof body.relationshipStatus === "string" ? (body.relationshipStatus as never) : undefined,
-      pipelineStage: typeof body.pipelineStage === "string" ? (body.pipelineStage as never) : undefined,
-      tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
-    },
-    guard.principal.userId,
-  );
+  const contact = await createContact(parsed.input, guard.principal.userId);
+  if (parsed.initialNote) {
+    await addNote(contact.id, guard.principal.userId, parsed.initialNote);
+  }
   return Response.json(contact, { status: 201 });
 }

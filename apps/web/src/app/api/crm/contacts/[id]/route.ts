@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireCrmSuperAdmin } from "@/lib/crm/guard";
+import { parseContactWriteBody } from "@/lib/crm/server/contact-payload";
 import {
   getContact,
   listActivities,
@@ -34,18 +35,21 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   const guard = await requireCrmSuperAdmin(req);
   if (!guard.ok) return guard.response;
   const { id } = await ctx.params;
+  const existing = await getContact(id);
+  if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+
   const body = (await req.json()) as Record<string, unknown>;
+  const parsed = parseContactWriteBody(body, existing);
+  if (Object.keys(parsed.validationErrors).length) {
+    return Response.json({ error: "Validation failed", fields: parsed.validationErrors }, { status: 422 });
+  }
+
+  const patch = parsed.input;
   const updated = await updateContact(
     id,
     {
-      fullName: typeof body.fullName === "string" ? body.fullName : undefined,
-      primaryEmail: typeof body.primaryEmail === "string" ? body.primaryEmail : undefined,
-      phone: body.phone === null ? null : typeof body.phone === "string" ? body.phone : undefined,
-      organization: typeof body.organization === "string" ? body.organization : undefined,
-      classifications: Array.isArray(body.classifications) ? (body.classifications as never[]) : undefined,
-      relationshipStatus: typeof body.relationshipStatus === "string" ? (body.relationshipStatus as never) : undefined,
-      pipelineStage: typeof body.pipelineStage === "string" ? (body.pipelineStage as never) : undefined,
-      tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+      ...patch,
+      clearPhone: patch.phone === null,
     },
     guard.principal.userId,
   );

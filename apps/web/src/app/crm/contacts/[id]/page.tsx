@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
+import { ContactEditorModal } from "@/components/crm/contacts/ContactEditorModal";
+import { ContactInfoOverview } from "@/components/crm/contacts/ContactInfoOverview";
+import { ContactProfileHeader } from "@/components/crm/contacts/ContactProfileHeader";
 import { crmBtnPrimarySm } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { addCrmNote, fetchCrmContact } from "@/lib/crm/client-api";
 import { fetchContactEmailActivity } from "@/lib/crm/email-client-api";
 import type { CrmEmailActivityItem } from "@/lib/crm/email/types";
 import type { CrmActivity, CrmContact, CrmEmailMessage, CrmFollowUp, CrmNote } from "@/lib/crm/types";
+
+type TabKey = "overview" | "contact" | "notes" | "emails" | "timeline" | "followups" | "waitlist";
 
 export default function CrmContactProfilePage() {
   const params = useParams<{ id: string }>();
@@ -20,7 +25,8 @@ export default function CrmContactProfilePage() {
   const [followUps, setFollowUps] = useState<CrmFollowUp[]>([]);
   const [campaignEmails, setCampaignEmails] = useState<CrmEmailActivityItem[]>([]);
   const [noteBody, setNoteBody] = useState("");
-  const [tab, setTab] = useState<"overview" | "notes" | "emails" | "timeline" | "followups" | "waitlist">("overview");
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || !params.id) return;
@@ -50,27 +56,29 @@ export default function CrmContactProfilePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <header className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-6">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--studio-text-tertiary)]">Contact</p>
-        <h1 className="mt-1 text-2xl font-semibold text-[var(--studio-text-primary)]">{contact.fullName || contact.primaryEmail}</h1>
-        <p className="mt-1 text-sm text-[var(--studio-text-secondary)]">{contact.primaryEmail}</p>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <Badge>{contact.relationshipStatus.replaceAll("_", " ")}</Badge>
-          {contact.tags.map((t) => (
-            <Badge key={t}>{t}</Badge>
-          ))}
-          {contact.contactSource && <Badge>{contact.contactSource}</Badge>}
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <ContactProfileHeader contact={contact} onEdit={() => setEditorOpen(true)} />
+
+      <ContactEditorModal
+        open={editorOpen}
+        mode="edit"
+        contact={contact}
+        token={token}
+        onClose={() => setEditorOpen(false)}
+        onSaved={(c) => {
+          setContact(c);
+          void load();
+        }}
+      />
 
       <div className="mt-6 flex flex-wrap gap-2">
         {(
           [
             ["overview", "Overview"],
+            ["contact", "Contact information"],
             ["notes", "Notes"],
             ["emails", "Email activity"],
-            ["timeline", "Timeline"],
+            ["timeline", "Activity"],
             ["followups", "Follow-ups"],
             ["waitlist", "Waitlist"],
           ] as const
@@ -80,10 +88,10 @@ export default function CrmContactProfilePage() {
             type="button"
             onClick={() => setTab(key)}
             className={[
-              "rounded-full border px-3 py-1 text-xs",
+              "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
               tab === key
                 ? "border-[var(--studio-accent)] bg-[var(--studio-accent-muted)] text-[var(--studio-accent)]"
-                : "border-[var(--studio-border)] text-[var(--studio-text-secondary)]",
+                : "border-[var(--studio-border)] text-[var(--studio-text-secondary)] hover:bg-[var(--studio-bg-hover)]",
             ].join(" ")}
           >
             {label}
@@ -91,27 +99,30 @@ export default function CrmContactProfilePage() {
         ))}
       </div>
 
-      <section className="mt-6 rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
+      <section className="mt-6 rounded-2xl border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5 sm:p-6">
         {tab === "overview" && (
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Field label="Phone" value={contact.phone ?? "—"} />
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <Field label="Organization" value={contact.organization ?? "—"} />
-            <Field label="Country" value={contact.countryCode ?? "—"} />
             <Field label="Pipeline" value={contact.pipelineStage.replaceAll("_", " ")} />
             <Field label="Classifications" value={contact.classifications.join(", ") || "—"} />
             <Field label="Next follow-up" value={contact.nextFollowUpAt ? new Date(contact.nextFollowUpAt).toLocaleString() : "—"} />
+            <Field label="Last contact" value={contact.lastInteractionAt ? new Date(contact.lastInteractionAt).toLocaleString() : "—"} />
+            <Field label="Date added" value={new Date(contact.dateAdded).toLocaleDateString()} />
           </dl>
         )}
 
+        {tab === "contact" && <ContactInfoOverview contact={contact} />}
+
         {tab === "notes" && (
           <div className="space-y-4">
+            <p className="text-xs text-[var(--studio-text-tertiary)]">Notes are private CRM information.</p>
             <form onSubmit={(e) => void onAddNote(e)} className="space-y-2">
               <textarea
                 value={noteBody}
                 onChange={(e) => setNoteBody(e.target.value)}
-                rows={3}
+                rows={4}
                 placeholder="Internal note…"
-                className="w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
               />
               <button type="submit" className={crmBtnPrimarySm}>
                 Add note
@@ -119,9 +130,12 @@ export default function CrmContactProfilePage() {
             </form>
             <ul className="space-y-3">
               {notes.map((n) => (
-                <li key={n.id} className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] p-3 text-sm">
+                <li key={n.id} className="rounded-xl border border-[var(--studio-border)] bg-[var(--studio-bg-1)] p-4 text-sm">
                   <p className="whitespace-pre-wrap text-[var(--studio-text-primary)]">{n.body}</p>
-                  <p className="mt-2 text-[11px] text-[var(--studio-text-tertiary)]">{new Date(n.createdAt).toLocaleString()}</p>
+                  <p className="mt-2 text-[11px] text-[var(--studio-text-tertiary)]">
+                    {new Date(n.createdAt).toLocaleString()}
+                    {n.updatedAt !== n.createdAt ? ` · edited ${new Date(n.updatedAt).toLocaleString()}` : ""}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -131,7 +145,7 @@ export default function CrmContactProfilePage() {
         {tab === "emails" && (
           <ul className="space-y-2 text-sm">
             {campaignEmails.map((m) => (
-              <li key={m.id} className="rounded-md border border-[var(--studio-border)] p-3">
+              <li key={m.id} className="rounded-xl border border-[var(--studio-border)] p-3">
                 <p className="font-medium text-[var(--studio-text-primary)]">{m.eventType.replaceAll("_", " ")}</p>
                 <p className="text-xs text-[var(--studio-text-tertiary)]">
                   {new Date(m.occurredAt).toLocaleString()} · {m.source}
@@ -140,7 +154,7 @@ export default function CrmContactProfilePage() {
               </li>
             ))}
             {emails.map((m) => (
-              <li key={m.id} className="rounded-md border border-[var(--studio-border)] p-3">
+              <li key={m.id} className="rounded-xl border border-[var(--studio-border)] p-3">
                 <p className="font-medium text-[var(--studio-text-primary)]">{m.subject ?? "(no subject)"}</p>
                 <p className="text-xs text-[var(--studio-text-tertiary)]">
                   {m.deliveryStatus} · {m.sentAt ? new Date(m.sentAt).toLocaleString() : "not sent"}
@@ -159,8 +173,8 @@ export default function CrmContactProfilePage() {
         {tab === "timeline" && (
           <ul className="space-y-2">
             {activities.map((a) => (
-              <li key={a.id} className="flex gap-3 text-sm">
-                <span className="w-40 shrink-0 text-[11px] text-[var(--studio-text-tertiary)]">{new Date(a.occurredAt).toLocaleString()}</span>
+              <li key={a.id} className="flex flex-col gap-1 text-sm sm:flex-row sm:gap-3">
+                <span className="w-44 shrink-0 text-[11px] text-[var(--studio-text-tertiary)]">{new Date(a.occurredAt).toLocaleString()}</span>
                 <span className="text-[var(--studio-text-primary)]">{a.eventType.replaceAll("_", " ")}</span>
                 <span className="text-[var(--studio-text-tertiary)]">({a.source})</span>
               </li>
@@ -171,7 +185,7 @@ export default function CrmContactProfilePage() {
         {tab === "followups" && (
           <ul className="space-y-2 text-sm">
             {followUps.map((f) => (
-              <li key={f.id} className="rounded-md border border-[var(--studio-border)] p-3">
+              <li key={f.id} className="rounded-xl border border-[var(--studio-border)] p-3">
                 <p className="font-medium">{f.title}</p>
                 <p className="text-xs text-[var(--studio-text-tertiary)]">
                   Due {new Date(f.dueAt).toLocaleDateString()} · {f.priority} · {f.status}
@@ -182,20 +196,12 @@ export default function CrmContactProfilePage() {
         )}
 
         {tab === "waitlist" && (
-          <pre className="overflow-x-auto rounded-md bg-[var(--studio-bg-1)] p-3 text-xs text-[var(--studio-text-secondary)]">
+          <pre className="overflow-x-auto rounded-xl bg-[var(--studio-bg-1)] p-3 text-xs text-[var(--studio-text-secondary)]">
             {JSON.stringify(contact.waitlistSnapshot ?? {}, null, 2)}
           </pre>
         )}
       </section>
     </div>
-  );
-}
-
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full border border-[var(--studio-border)] bg-[var(--studio-bg-3)] px-2 py-0.5 text-[var(--studio-text-secondary)]">
-      {children}
-    </span>
   );
 }
 

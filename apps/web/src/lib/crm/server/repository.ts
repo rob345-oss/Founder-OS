@@ -51,6 +51,7 @@ export type CreateContactInput = {
   pipelineStage?: CrmPipelineStage;
   tags?: string[];
   marketingConsent?: boolean | null;
+  contactPreferences?: Record<string, unknown> | null;
 };
 
 // --- SQLite implementation ---
@@ -138,7 +139,7 @@ function sqliteInsertContact(db: Database.Database, input: CreateContactInput, e
     relationship_status: input.relationshipStatus ?? "new",
     pipeline_stage: input.pipelineStage ?? "new_lead",
     assigned_owner_id: null,
-    contact_preferences: "{}",
+    contact_preferences: JSON.stringify(input.contactPreferences ?? {}),
     tags: JSON.stringify(input.tags ?? []),
     marketing_consent: input.marketingConsent === undefined ? null : input.marketingConsent ? 1 : 0,
     next_follow_up_at: extra?.nextFollowUpAt ?? null,
@@ -446,8 +447,8 @@ export async function createContact(input: CreateContactInput, authorUserId: str
         `INSERT INTO crm_contacts (
           id, full_name, primary_email, primary_email_normalized, additional_emails, phone, country_code,
           preferred_language, organization, contact_source, classifications, relationship_status, pipeline_stage,
-          tags, marketing_consent, last_interaction_at, date_added, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15,$16,$17,$18,$19)`,
+          contact_preferences, tags, marketing_consent, last_interaction_at, date_added, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20)`,
         [
           id,
           input.fullName?.trim() ?? "",
@@ -462,6 +463,7 @@ export async function createContact(input: CreateContactInput, authorUserId: str
           JSON.stringify(input.classifications ?? ["general_contact"]),
           input.relationshipStatus ?? "new",
           input.pipelineStage ?? "new_lead",
+          JSON.stringify(input.contactPreferences ?? {}),
           JSON.stringify(input.tags ?? []),
           input.marketingConsent ?? null,
           ts,
@@ -490,7 +492,12 @@ export async function createContact(input: CreateContactInput, authorUserId: str
 
 export async function updateContact(
   id: string,
-  patch: Partial<CreateContactInput> & { pipelineStage?: CrmPipelineStage; relationshipStatus?: CrmRelationshipStatus },
+  patch: Partial<CreateContactInput> & {
+    pipelineStage?: CrmPipelineStage;
+    relationshipStatus?: CrmRelationshipStatus;
+    contactPreferences?: Record<string, unknown> | null;
+    clearPhone?: boolean;
+  },
   actorUserId: string,
 ): Promise<CrmContact | null> {
   const existing = await getContact(id);
@@ -503,12 +510,18 @@ export async function updateContact(
         `UPDATE crm_contacts SET
           full_name = COALESCE($2, full_name),
           primary_email = COALESCE($3, primary_email),
-          phone = COALESCE($4, phone),
+          primary_email_normalized = COALESCE($11, primary_email_normalized),
+          additional_emails = COALESCE($12::jsonb, additional_emails),
+          phone = CASE WHEN $13 THEN NULL ELSE COALESCE($4, phone) END,
+          country_code = COALESCE($14, country_code),
+          preferred_language = COALESCE($15, preferred_language),
           organization = COALESCE($5, organization),
           classifications = COALESCE($6::jsonb, classifications),
           relationship_status = COALESCE($7, relationship_status),
           pipeline_stage = COALESCE($8, pipeline_stage),
+          contact_preferences = COALESCE($16::jsonb, contact_preferences),
           tags = COALESCE($9::jsonb, tags),
+          marketing_consent = COALESCE($17, marketing_consent),
           updated_at = $10
         WHERE id = $1`,
         [
@@ -522,6 +535,13 @@ export async function updateContact(
           patch.pipelineStage,
           patch.tags ? JSON.stringify(patch.tags) : null,
           ts,
+          patch.primaryEmail ? normalizeEmail(patch.primaryEmail) : null,
+          patch.additionalEmails ? JSON.stringify(patch.additionalEmails) : null,
+          Boolean(patch.clearPhone),
+          patch.countryCode,
+          patch.preferredLanguage,
+          patch.contactPreferences ? JSON.stringify(patch.contactPreferences) : null,
+          patch.marketingConsent,
         ],
       );
       await q(
@@ -544,24 +564,35 @@ export async function updateContact(
       full_name = COALESCE(?, full_name),
       primary_email = COALESCE(?, primary_email),
       primary_email_normalized = COALESCE(?, primary_email_normalized),
-      phone = COALESCE(?, phone),
+      additional_emails = COALESCE(?, additional_emails),
+      phone = CASE WHEN ? THEN NULL ELSE COALESCE(?, phone) END,
+      country_code = COALESCE(?, country_code),
+      preferred_language = COALESCE(?, preferred_language),
       organization = COALESCE(?, organization),
       classifications = COALESCE(?, classifications),
       relationship_status = COALESCE(?, relationship_status),
       pipeline_stage = COALESCE(?, pipeline_stage),
+      contact_preferences = COALESCE(?, contact_preferences),
       tags = COALESCE(?, tags),
+      marketing_consent = COALESCE(?, marketing_consent),
       updated_at = ?
     WHERE id = ?`,
   ).run(
     patch.fullName,
     patch.primaryEmail,
     patch.primaryEmail ? normalizeEmail(patch.primaryEmail) : null,
+    patch.additionalEmails ? JSON.stringify(patch.additionalEmails) : null,
+    patch.clearPhone ? 1 : 0,
     patch.phone,
+    patch.countryCode,
+    patch.preferredLanguage,
     patch.organization,
     patch.classifications ? JSON.stringify(patch.classifications) : null,
     patch.relationshipStatus,
     patch.pipelineStage,
+    patch.contactPreferences ? JSON.stringify(patch.contactPreferences) : null,
     patch.tags ? JSON.stringify(patch.tags) : null,
+    patch.marketingConsent === undefined ? null : patch.marketingConsent,
     ts,
     id,
   );

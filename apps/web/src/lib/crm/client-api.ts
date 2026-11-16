@@ -16,8 +16,11 @@ function headers(token: string | null): HeadersInit {
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as { error?: string } & T;
-  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  const body = (await res.json()) as { error?: string; fields?: Record<string, string> } & T;
+  if (!res.ok) {
+    const fieldMsg = body.fields ? ` ${Object.values(body.fields).join(" ")}` : "";
+    throw new Error((body.error ?? `HTTP ${res.status}`) + fieldMsg);
+  }
   return body;
 }
 

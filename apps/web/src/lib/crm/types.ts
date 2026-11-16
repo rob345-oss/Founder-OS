@@ -59,6 +59,8 @@ export type CrmContact = {
   relationshipStatus: CrmRelationshipStatus;
   pipelineStage: CrmPipelineStage;
   assignedOwnerId: string | null;
+  /** Rich contact card (emails, phones, addresses, comm prefs) — stored in `contact_preferences`. */
+  profile: Record<string, unknown> | null;
   tags: string[];
   marketingConsent: boolean | null;
   nextFollowUpAt: string | null;
@@ -181,4 +183,15 @@ export type TgAuthMe = {
   application_role?: string;
   roles?: string[];
   is_admin?: boolean;
+};
+
+/** API body for Apple-style contact editor create/update. */
+export type CrmContactProfilePayload = {
+  profile: Record<string, unknown>;
+  relationshipStatus?: CrmRelationshipStatus;
+  pipelineStage?: CrmPipelineStage;
+  classifications?: CrmClassification[];
+  tags?: string[];
+  marketingConsent?: boolean | null;
+  initialNote?: string;
 };
