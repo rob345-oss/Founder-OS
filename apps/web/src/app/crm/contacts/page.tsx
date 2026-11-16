@@ -3,43 +3,48 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AddContactDialog } from "@/components/crm/AddContactDialog";
 import { useCrmSession } from "@/components/crm/useCrmSession";
-import { createCrmContact, fetchCrmContacts } from "@/lib/crm/client-api";
-import type { CrmContactListItem } from "@/lib/crm/types";
+import { CONTACT_TYPE_OPTIONS, LEAD_SOURCE_OPTIONS, LIFECYCLE_OPTIONS } from "@/lib/crm/contact-form";
+import { fetchCrmContacts } from "@/lib/crm/client-api";
+import { CRM_CLASSIFICATIONS, CRM_PIPELINE_STAGES, CRM_RELATIONSHIP_STATUSES, type CrmContactListItem } from "@/lib/crm/types";
 
 export default function CrmContactsPage() {
   const { token } = useCrmSession();
   const [q, setQ] = useState("");
+  const [classification, setClassification] = useState("");
+  const [relationshipStatus, setRelationshipStatus] = useState("");
+  const [pipelineStage, setPipelineStage] = useState("");
+  const [source, setSource] = useState("");
   const [items, setItems] = useState<CrmContactListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ fullName: "", primaryEmail: "" });
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await fetchCrmContacts(token, { q, limit: 100, sort: "last_interaction", direction: "desc" });
+      const data = await fetchCrmContacts(token, {
+        q,
+        classification: classification || undefined,
+        relationshipStatus: relationshipStatus || undefined,
+        pipelineStage: pipelineStage || undefined,
+        source: source || undefined,
+        limit: 100,
+        sort: "last_interaction",
+        direction: "desc",
+      });
       setItems(data.items);
       setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [token, q]);
+  }, [token, q, classification, relationshipStatus, pipelineStage, source]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function onCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    await createCrmContact(token, { fullName: form.fullName, primaryEmail: form.primaryEmail });
-    setShowCreate(false);
-    setForm({ fullName: "", primaryEmail: "" });
-    await load();
-  }
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -57,36 +62,25 @@ export default function CrmContactsPage() {
         </button>
       </header>
 
-      <div className="mb-5">
+      <div className="mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name, email, phone, organization"
-          className="w-full max-w-md rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-3 py-2 text-sm text-[var(--studio-text-primary)]"
+          placeholder="Search name, email, phone"
+          className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-3 py-2 text-sm text-[var(--studio-text-primary)] lg:col-span-2"
         />
+        <FilterSelect value={classification} onChange={setClassification} options={CRM_CLASSIFICATIONS.map((v) => ({ value: v, label: v }))} label="Classification" />
+        <FilterSelect
+          value={relationshipStatus}
+          onChange={setRelationshipStatus}
+          options={CRM_RELATIONSHIP_STATUSES.map((v) => ({ value: v, label: v }))}
+          label="Relationship"
+        />
+        <FilterSelect value={pipelineStage} onChange={setPipelineStage} options={CRM_PIPELINE_STAGES.map((v) => ({ value: v, label: v }))} label="Pipeline" />
+        <FilterSelect value={source} onChange={setSource} options={LEAD_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} label="Source" />
       </div>
 
-      {showCreate && (
-        <form onSubmit={(e) => void onCreate(e)} className="mb-6 rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input
-              className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
-              placeholder="Full name"
-              value={form.fullName}
-              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-            />
-            <input
-              required
-              type="email"
-              className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
-              placeholder="Email"
-              value={form.primaryEmail}
-              onChange={(e) => setForm((f) => ({ ...f, primaryEmail: e.target.value }))}
-            />
-          </div>
-          <MotionButtons onCancel={() => setShowCreate(false)} />
-        </form>
-      )}
+      <AddContactDialog token={token} open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => void load()} />
 
       <div className="overflow-hidden rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)]">
         <table className="min-w-full text-left text-sm">
@@ -94,8 +88,12 @@ export default function CrmContactsPage() {
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
+              <th className="px-4 py-3 font-medium">Phone</th>
+              <th className="px-4 py-3 font-medium">Type</th>
+              <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Stage</th>
+              <th className="px-4 py-3 font-medium">Updated</th>
             </tr>
           </thead>
           <tbody>
@@ -107,8 +105,12 @@ export default function CrmContactsPage() {
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.primaryEmail}</td>
+                <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.phone ?? "—"}</td>
+                <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.classifications[0] ?? "—"}</td>
+                <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.contactSource ?? "—"}</td>
                 <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.relationshipStatus.replaceAll("_", " ")}</td>
                 <td className="px-4 py-3 text-[var(--studio-text-secondary)]">{c.pipelineStage.replaceAll("_", " ")}</td>
+                <td className="px-4 py-3 text-[var(--studio-text-tertiary)]">{new Date(c.updatedAt).toLocaleDateString()}</td>
               </tr>
             ))}
           </tbody>
@@ -117,19 +119,37 @@ export default function CrmContactsPage() {
           <p className="p-6 text-sm text-[var(--studio-text-tertiary)]">No contacts found.</p>
         )}
       </div>
+      <p className="mt-2 text-[11px] text-[var(--studio-text-tertiary)]">
+        Manual types: {CONTACT_TYPE_OPTIONS.map((o) => o.label).join(" · ")} · Lifecycles: {LIFECYCLE_OPTIONS.length}
+      </p>
     </div>
   );
 }
 
-function MotionButtons({ onCancel }: { onCancel: () => void }) {
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  label: string;
+}) {
   return (
-    <div className="mt-3 flex gap-2">
-      <button type="submit" className="rounded-md bg-[var(--studio-accent)] px-3 py-1.5 text-xs font-medium text-white">
-        Save
-      </button>
-      <button type="button" onClick={onCancel} className="rounded-md border border-[var(--studio-border)] px-3 py-1.5 text-xs">
-        Cancel
-      </button>
-    </div>
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-2 py-2 text-xs text-[var(--studio-text-primary)]"
+    >
+      <option value="">{label}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label.replaceAll("_", " ")}
+        </option>
+      ))}
+    </select>
   );
 }

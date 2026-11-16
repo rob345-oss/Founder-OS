@@ -39,7 +39,8 @@ describe("CRM email webhook", () => {
   });
 
   it("ingests signed SendGrid-style events for known contacts", async () => {
-    await createContact({ primaryEmail: "waitlist@example.com", fullName: "Waitlist" }, "test-user");
+    const created = await createContact({ primaryEmail: "waitlist@example.com", fullName: "Waitlist" }, "test-user");
+    expect(created.ok).toBe(true);
     const body = JSON.stringify([
       {
         email: "waitlist@example.com",

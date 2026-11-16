@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { MetricCard } from "@/components/crm/MetricCard";
 import { useCrmSession } from "@/components/crm/useCrmSession";
-import { fetchCrmDashboard, syncCrmWaitlist } from "@/lib/crm/client-api";
+import { fetchCrmDashboard, runCrmWaitlistBackfill, syncCrmWaitlist } from "@/lib/crm/client-api";
 import type { CrmDashboardMetrics } from "@/lib/crm/types";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -23,6 +23,8 @@ export default function CrmOverviewPage() {
   const { token } = useCrmSession();
   const [metrics, setMetrics] = useState<CrmDashboardMetrics | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillPreview, setBackfillPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -56,6 +58,22 @@ export default function CrmOverviewPage() {
     }
   }
 
+  async function onBackfillDryRun() {
+    if (!token) return;
+    setBackfilling(true);
+    setBackfillPreview(null);
+    try {
+      const result = await runCrmWaitlistBackfill(token, { dryRun: true });
+      setBackfillPreview(
+        `Dry run: ${result.examined} TG leads would be examined (${result.leadCount} fetched). No writes performed.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Backfill preview failed");
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -68,15 +86,31 @@ export default function CrmOverviewPage() {
             Live counts from the CRM store, synchronized with authoritative Titanium Guardian waitlist leads.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={syncing}
-          onClick={() => void onSync()}
-          className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm font-medium text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)] disabled:opacity-60"
-        >
-          {syncing ? "Syncing waitlist…" : "Sync waitlist"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={backfilling}
+            onClick={() => void onBackfillDryRun()}
+            className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm font-medium text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)] disabled:opacity-60"
+          >
+            {backfilling ? "Previewing…" : "Waitlist backfill (dry run)"}
+          </button>
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void onSync()}
+            className="rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] px-4 py-2 text-sm font-medium text-[var(--studio-text-primary)] hover:bg-[var(--studio-bg-hover)] disabled:opacity-60"
+          >
+            {syncing ? "Syncing waitlist…" : "Sync waitlist"}
+          </button>
+        </div>
       </header>
+
+      {backfillPreview && (
+        <p className="mb-4 rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-3 text-sm text-[var(--studio-text-secondary)]">
+          {backfillPreview}
+        </p>
+      )}
 
       {error && (
         <p className="mb-6 rounded-lg border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-200">{error}</p>
@@ -84,7 +118,11 @@ export default function CrmOverviewPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Total contacts" value={metrics?.totalContacts ?? "—"} />
-        <MetricCard label="Waitlist" value={metrics?.activeWaitlist ?? "—"} />
+        <MetricCard label="Total leads" value={metrics?.totalLeads ?? "—"} />
+        <MetricCard label="New leads (7d)" value={metrics?.newLeadsThisWeek ?? "—"} />
+        <MetricCard label="Waitlist leads" value={metrics?.waitlistLeads ?? "—"} />
+        <MetricCard label="Qualified" value={metrics?.qualifiedLeads ?? "—"} />
+        <MetricCard label="Active waitlist" value={metrics?.activeWaitlist ?? "—"} />
         <MetricCard label="Active prospects" value={metrics?.activeProspects ?? "—"} />
         <MetricCard label="Pilot candidates" value={metrics?.pilotCandidates ?? "—"} />
         <MetricCard label="Customers" value={metrics?.activeCustomers ?? "—"} />
@@ -103,12 +141,7 @@ export default function CrmOverviewPage() {
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2">
         <div className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[var(--studio-text-primary)]">Pipeline</h2>
-            <Link href="/crm/pipeline" className="text-xs text-[var(--studio-accent)] hover:underline">
-              Open board
-            </Link>
-          </div>
+          <PipelineSectionHeading />
           <ul className="space-y-2">
             {(metrics?.pipeline ?? []).map((row) => (
               <li key={row.stage} className="flex items-center gap-3 text-sm">
@@ -128,23 +161,69 @@ export default function CrmOverviewPage() {
           </ul>
         </div>
 
-        <div className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
-          <h2 className="mb-4 text-sm font-semibold text-[var(--studio-text-primary)]">Recent activity</h2>
-          <ul className="space-y-3">
-            {(metrics?.recentActivity ?? []).map((a) => (
-              <li key={a.id} className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2">
-                <p className="text-xs font-medium text-[var(--studio-text-primary)]">{a.eventType.replaceAll("_", " ")}</p>
-                <p className="mt-0.5 text-[11px] text-[var(--studio-text-tertiary)]">
-                  {new Date(a.occurredAt).toLocaleString()} · {a.source}
-                </p>
-              </li>
-            ))}
-            {!metrics?.recentActivity?.length && (
-              <li className="text-sm text-[var(--studio-text-tertiary)]">Activity will appear after sync and updates.</li>
-            )}
-          </ul>
-        </div>
+        <RecentContactsSection metrics={metrics} />
       </section>
+    </div>
+  );
+}
+
+function PipelineSectionHeading() {
+  return (
+    <div className="mb-4 flex items-center justify-between">
+      <h2 className="text-sm font-semibold text-[var(--studio-text-primary)]">Pipeline</h2>
+      <Link href="/crm/pipeline" className="text-xs text-[var(--studio-accent)] hover:underline">
+        Open board
+      </Link>
+    </div>
+  );
+}
+
+function RecentContactsSection({ metrics }: { metrics: CrmDashboardMetrics | null }) {
+  return (
+    <div className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
+      <h2 className="mb-4 text-sm font-semibold text-[var(--studio-text-primary)]">Recent contacts</h2>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-xs">
+          <thead>
+            <tr className="text-[var(--studio-text-tertiary)]">
+              <th className="pb-2 pr-3 font-medium">Name</th>
+              <th className="pb-2 pr-3 font-medium">Email</th>
+              <th className="pb-2 pr-3 font-medium">Stage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(metrics?.recentContacts ?? []).map((c) => (
+              <tr key={c.id} className="border-t border-[var(--studio-border)]/50">
+                <td className="py-2 pr-3">
+                  <Link href={`/crm/contacts/${c.id}`} className="text-[var(--studio-text-primary)] hover:underline">
+                    {c.fullName || "—"}
+                  </Link>
+                </td>
+                <td className="py-2 pr-3 text-[var(--studio-text-secondary)]">{c.primaryEmail}</td>
+                <td className="py-2 text-[var(--studio-text-secondary)]">{c.pipelineStage.replaceAll("_", " ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!metrics?.recentContacts?.length && (
+        <p className="text-sm text-[var(--studio-text-tertiary)]">Contacts will appear after create or sync.</p>
+      )}
+
+      <h3 className="mb-3 mt-6 text-sm font-semibold text-[var(--studio-text-primary)]">Recent activity</h3>
+      <ul className="space-y-3">
+        {(metrics?.recentActivity ?? []).map((a) => (
+          <li key={a.id} className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2">
+            <p className="text-xs font-medium text-[var(--studio-text-primary)]">{a.eventType.replaceAll("_", " ")}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--studio-text-tertiary)]">
+              {new Date(a.occurredAt).toLocaleString()} · {a.source}
+            </p>
+          </li>
+        ))}
+        {!metrics?.recentActivity?.length && (
+          <li className="text-sm text-[var(--studio-text-tertiary)]">Activity will appear after sync and updates.</li>
+        )}
+      </ul>
     </div>
   );
 }

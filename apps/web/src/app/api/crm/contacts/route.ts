@@ -1,9 +1,48 @@
 import type { NextRequest } from "next/server";
 
+import {
+  createContactInputFromForm,
+  type ContactFormInput,
+  type ContactTypeOption,
+  type LifecycleOption,
+} from "@/lib/crm/contact-form";
 import { requireCrmSuperAdmin } from "@/lib/crm/guard";
 import { createContact, listContacts } from "@/lib/crm/server/repository";
 
 export const dynamic = "force-dynamic";
+
+function bodyToContactForm(body: Record<string, unknown>): ContactFormInput {
+  return {
+    firstName: typeof body.firstName === "string" ? body.firstName : undefined,
+    lastName: typeof body.lastName === "string" ? body.lastName : undefined,
+    fullName: typeof body.fullName === "string" ? body.fullName : undefined,
+    primaryEmail: typeof body.primaryEmail === "string" ? body.primaryEmail : undefined,
+    phone: typeof body.phone === "string" ? body.phone : undefined,
+    countryCode: typeof body.countryCode === "string" ? body.countryCode : undefined,
+    organization: typeof body.organization === "string" ? body.organization : undefined,
+    contactType: (typeof body.contactType === "string"
+      ? body.contactType
+      : Array.isArray(body.classifications)
+        ? String(body.classifications[0])
+        : "general_contact") as ContactTypeOption,
+    lifecycle: (typeof body.lifecycle === "string" ? body.lifecycle : "new_lead") as LifecycleOption,
+    leadSource:
+      typeof body.leadSource === "string"
+        ? body.leadSource
+        : typeof body.contactSource === "string"
+          ? body.contactSource
+          : "manual",
+    tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+    marketingConsent:
+      typeof body.marketingConsent === "boolean" ? body.marketingConsent : body.marketingConsent === null ? null : undefined,
+    preferredChannel:
+      body.preferredChannel === "email" || body.preferredChannel === "phone" || body.preferredChannel === "sms"
+        ? body.preferredChannel
+        : undefined,
+    doNotContact: body.doNotContact === true,
+    preferenceNotes: typeof body.preferenceNotes === "string" ? body.preferenceNotes : undefined,
+  };
+}
 
 export async function GET(req: NextRequest) {
   const guard = await requireCrmSuperAdmin(req);
@@ -31,24 +70,15 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const body = (await req.json()) as Record<string, unknown>;
-  if (typeof body.primaryEmail !== "string" || !body.primaryEmail.includes("@")) {
-    return Response.json({ error: "primaryEmail is required" }, { status: 422 });
+  const form = bodyToContactForm(body);
+  const mapped = createContactInputFromForm(form);
+  if (!mapped.input) {
+    return Response.json({ error: "Validation failed", fieldErrors: mapped.validation.fieldErrors }, { status: 422 });
   }
-  const contact = await createContact(
-    {
-      fullName: typeof body.fullName === "string" ? body.fullName : "",
-      primaryEmail: body.primaryEmail,
-      additionalEmails: Array.isArray(body.additionalEmails) ? body.additionalEmails.map(String) : [],
-      phone: typeof body.phone === "string" ? body.phone : null,
-      countryCode: typeof body.countryCode === "string" ? body.countryCode : null,
-      organization: typeof body.organization === "string" ? body.organization : null,
-      contactSource: typeof body.contactSource === "string" ? body.contactSource : "manual",
-      classifications: Array.isArray(body.classifications) ? (body.classifications as never[]) : undefined,
-      relationshipStatus: typeof body.relationshipStatus === "string" ? (body.relationshipStatus as never) : undefined,
-      pipelineStage: typeof body.pipelineStage === "string" ? (body.pipelineStage as never) : undefined,
-      tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
-    },
-    guard.principal.userId,
-  );
-  return Response.json(contact, { status: 201 });
+
+  const result = await createContact(mapped.input, guard.principal.userId);
+  if (!result.ok) {
+    return Response.json({ error: "Duplicate contact", duplicates: result.duplicates }, { status: 409 });
+  }
+  return Response.json(result.contact, { status: 201 });
 }

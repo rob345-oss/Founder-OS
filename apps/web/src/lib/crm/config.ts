@@ -9,6 +9,7 @@ export type CrmConfig = {
   databaseUrl: string | undefined;
   dataDir: string | undefined;
   tgApiBaseUrl: string;
+  tgApiEnvIsProduction: boolean;
   backendTimeoutMs: number;
   supabaseUrl: string | undefined;
   supabaseAnonKey: string | undefined;
@@ -22,6 +23,9 @@ export type CrmConfig = {
   sendgridWebhookPublicKey: string | undefined;
   /** When false, open/click events are ignored (privacy). */
   emailTrackEngagement: boolean;
+  tgCrmEmailServiceSecret: string | undefined;
+  emailAllowSend: boolean;
+  emailStagingAllowlist: string[];
   syncIntervalMinutes: number;
 };
 
@@ -39,6 +43,12 @@ export function getCrmConfig(): CrmConfig {
   const intervalRaw = Number(readEnv("CRM_WAITLIST_SYNC_INTERVAL_MINUTES") ?? "5");
   const syncIntervalMinutes = Number.isFinite(intervalRaw) && intervalRaw > 0 ? intervalRaw : 5;
 
+  const allowlistRaw = readEnv("CRM_EMAIL_STAGING_ALLOWLIST") ?? readEnv("STAGING_EMAIL_ALLOWLIST") ?? "";
+  const emailStagingAllowlist = allowlistRaw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
   return {
     databaseUrl:
       readEnv("CRM_DATABASE_URL") ??
@@ -46,6 +56,7 @@ export function getCrmConfig(): CrmConfig {
       readEnv("DATABASE_URL"),
     dataDir: readEnv("FOUNDER_OS_CRM_DATA_DIR"),
     tgApiBaseUrl: tgApiBaseUrl.replace(/\/$/, ""),
+    tgApiEnvIsProduction: useProd,
     backendTimeoutMs,
     supabaseUrl: readEnv("SUPABASE_URL") ?? readEnv("NEXT_PUBLIC_SUPABASE_URL"),
     supabaseAnonKey: readEnv("SUPABASE_ANON_KEY") ?? readEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
@@ -55,6 +66,10 @@ export function getCrmConfig(): CrmConfig {
     emailWebhookSecret: readEnv("CRM_EMAIL_WEBHOOK_SECRET"),
     sendgridWebhookPublicKey: readEnv("CRM_SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY"),
     emailTrackEngagement: readEnv("CRM_EMAIL_TRACK_ENGAGEMENT") === "true",
+    tgCrmEmailServiceSecret:
+      readEnv("CRM_TG_CRM_EMAIL_SERVICE_SECRET") ?? readEnv("CRM_EMAIL_SERVICE_SECRET"),
+    emailAllowSend: readEnv("CRM_EMAIL_ALLOW_SEND") === "true",
+    emailStagingAllowlist,
     syncIntervalMinutes,
   };
 }

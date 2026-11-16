@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { useCrmSession } from "@/components/crm/useCrmSession";
-import { addCrmNote, fetchCrmContact } from "@/lib/crm/client-api";
+import { CONTACT_TYPE_OPTIONS, LIFECYCLE_OPTIONS, type ContactTypeOption, type LifecycleOption } from "@/lib/crm/contact-form";
+import { addCrmNote, fetchCrmContact, updateCrmContact } from "@/lib/crm/client-api";
+import { fetchContactEmailActivity } from "@/lib/crm/email-client-api";
+import type { CrmEmailActivityItem } from "@/lib/crm/email/types";
 import type { CrmActivity, CrmContact, CrmEmailMessage, CrmFollowUp, CrmNote } from "@/lib/crm/types";
 
 export default function CrmContactProfilePage() {
@@ -15,8 +18,18 @@ export default function CrmContactProfilePage() {
   const [activities, setActivities] = useState<CrmActivity[]>([]);
   const [emails, setEmails] = useState<CrmEmailMessage[]>([]);
   const [followUps, setFollowUps] = useState<CrmFollowUp[]>([]);
+  const [emailActivity, setEmailActivity] = useState<CrmEmailActivityItem[]>([]);
   const [noteBody, setNoteBody] = useState("");
   const [tab, setTab] = useState<"overview" | "notes" | "emails" | "timeline" | "followups" | "waitlist">("overview");
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    phone: "",
+    organization: "",
+    contactType: "general_contact" as ContactTypeOption,
+    lifecycle: "new_lead" as LifecycleOption,
+  });
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || !params.id) return;
@@ -26,11 +39,40 @@ export default function CrmContactProfilePage() {
     setActivities(data.activities);
     setEmails(data.emails);
     setFollowUps(data.followUps);
+    setEmailActivity(await fetchContactEmailActivity(token, params.id));
+    setEditForm({
+      fullName: data.contact.fullName,
+      phone: data.contact.phone ?? "",
+      organization: data.contact.organization ?? "",
+      contactType: (data.contact.classifications[0] ?? "general_contact") as ContactTypeOption,
+      lifecycle: mapPipelineToLifecycle(data.contact.pipelineStage),
+    });
   }, [token, params.id]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function onSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !params.id) return;
+    const lifecycle = LIFECYCLE_OPTIONS.find((o) => o.value === editForm.lifecycle);
+    setSaving(true);
+    try {
+      await updateCrmContact(token, params.id, {
+        fullName: editForm.fullName,
+        phone: editForm.phone || null,
+        organization: editForm.organization || null,
+        classifications: [editForm.contactType],
+        relationshipStatus: lifecycle?.relationshipStatus,
+        pipelineStage: lifecycle?.pipelineStage,
+      });
+      setEditing(false);
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function onAddNote(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +92,10 @@ export default function CrmContactProfilePage() {
         <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--studio-text-tertiary)]">Contact</p>
         <h1 className="mt-1 text-2xl font-semibold text-[var(--studio-text-primary)]">{contact.fullName || contact.primaryEmail}</h1>
         <p className="mt-1 text-sm text-[var(--studio-text-secondary)]">{contact.primaryEmail}</p>
+        <p className="mt-2 text-xs text-[var(--studio-text-tertiary)]">
+          Created {new Date(contact.createdAt).toLocaleString()} · Updated {new Date(contact.updatedAt).toLocaleString()}
+        </p>
+        <ProfileEditControls editing={editing} onToggle={() => setEditing((v) => !v)} />
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           <Badge>{contact.relationshipStatus.replaceAll("_", " ")}</Badge>
           {contact.tags.map((t) => (
@@ -64,7 +110,7 @@ export default function CrmContactProfilePage() {
           [
             ["overview", "Overview"],
             ["notes", "Notes"],
-            ["emails", "Email history"],
+            ["emails", "Email activity"],
             ["timeline", "Timeline"],
             ["followups", "Follow-ups"],
             ["waitlist", "Waitlist"],
@@ -88,14 +134,79 @@ export default function CrmContactProfilePage() {
 
       <section className="mt-6 rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
         {tab === "overview" && (
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Field label="Phone" value={contact.phone ?? "—"} />
-            <Field label="Organization" value={contact.organization ?? "—"} />
-            <Field label="Country" value={contact.countryCode ?? "—"} />
-            <Field label="Pipeline" value={contact.pipelineStage.replaceAll("_", " ")} />
-            <Field label="Classifications" value={contact.classifications.join(", ") || "—"} />
-            <Field label="Next follow-up" value={contact.nextFollowUpAt ? new Date(contact.nextFollowUpAt).toLocaleString() : "—"} />
-          </dl>
+          <div className="space-y-4">
+            {editing ? (
+              <form onSubmit={(e) => void onSaveProfile(e)} className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm sm:col-span-2">
+                  Full name
+                  <input
+                    className="mt-1 w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm">
+                  Phone
+                  <input
+                    className="mt-1 w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm">
+                  Organization
+                  <input
+                    className="mt-1 w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                    value={editForm.organization}
+                    onChange={(e) => setEditForm((f) => ({ ...f, organization: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm">
+                  Contact type
+                  <select
+                    className="mt-1 w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                    value={editForm.contactType}
+                    onChange={(e) => setEditForm((f) => ({ ...f, contactType: e.target.value as ContactTypeOption }))}
+                  >
+                    {CONTACT_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  Lifecycle
+                  <select
+                    className="mt-1 w-full rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
+                    value={editForm.lifecycle}
+                    onChange={(e) => setEditForm((f) => ({ ...f, lifecycle: e.target.value as LifecycleOption }))}
+                  >
+                    {LIFECYCLE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="sm:col-span-2">
+                  <button type="submit" disabled={saving} className="rounded-md bg-[var(--studio-accent)] px-3 py-1.5 text-xs font-medium text-white">
+                    {saving ? "Saving…" : "Save changes"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <Field label="Phone" value={contact.phone ?? "—"} />
+                <Field label="Organization" value={contact.organization ?? "—"} />
+                <Field label="Country" value={contact.countryCode ?? "—"} />
+                <Field label="Pipeline" value={contact.pipelineStage.replaceAll("_", " ")} />
+                <Field label="Classifications" value={contact.classifications.join(", ") || "—"} />
+                <Field label="Preferences" value={JSON.stringify(contact.contactPreferences ?? {})} />
+                <Field label="Next follow-up" value={contact.nextFollowUpAt ? new Date(contact.nextFollowUpAt).toLocaleString() : "—"} />
+              </dl>
+            )}
+          </div>
         )}
 
         {tab === "notes" && (
@@ -125,19 +236,27 @@ export default function CrmContactProfilePage() {
 
         {tab === "emails" && (
           <ul className="space-y-2 text-sm">
+            {emailActivity.map((item) => (
+              <li key={item.id} className="rounded-md border border-[var(--studio-border)] p-3">
+                <p className="font-medium text-[var(--studio-text-primary)]">
+                  {item.eventType.replaceAll("_", " ")}
+                  {item.campaignName ? ` · ${item.campaignName}` : ""}
+                </p>
+                <p className="text-xs text-[var(--studio-text-tertiary)]">
+                  {new Date(item.occurredAt).toLocaleString()} · {item.source}
+                </p>
+              </li>
+            ))}
             {emails.map((m) => (
-              <li key={m.id} className="rounded-md border border-[var(--studio-border)] p-3">
+              <li key={m.id} className="rounded-md border border-[var(--studio-border)] bg-[var(--studio-bg-1)] p-3">
                 <p className="font-medium text-[var(--studio-text-primary)]">{m.subject ?? "(no subject)"}</p>
                 <p className="text-xs text-[var(--studio-text-tertiary)]">
                   {m.deliveryStatus} · {m.sentAt ? new Date(m.sentAt).toLocaleString() : "not sent"}
                 </p>
               </li>
             ))}
-            {!emails.length && (
-              <p className="text-[var(--studio-text-tertiary)]">
-                No CRM email rows yet. Transactional waitlist email is sent by TG via SendGrid/SMTP; ingest webhooks can populate this
-                table later.
-              </p>
+            {!emailActivity.length && !emails.length && (
+              <p className="text-[var(--studio-text-tertiary)]">No email activity recorded for this contact yet.</p>
             )}
           </ul>
         )}
@@ -182,6 +301,23 @@ function Badge({ children }: { children: React.ReactNode }) {
     <span className="rounded-full border border-[var(--studio-border)] bg-[var(--studio-bg-3)] px-2 py-0.5 text-[var(--studio-text-secondary)]">
       {children}
     </span>
+  );
+}
+
+function mapPipelineToLifecycle(stage: string): LifecycleOption {
+  const match = LIFECYCLE_OPTIONS.find((o) => o.pipelineStage === stage);
+  return match?.value ?? "new_lead";
+}
+
+function ProfileEditControls({ editing, onToggle }: { editing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mt-3 rounded-md border border-[var(--studio-border)] px-3 py-1 text-xs text-[var(--studio-text-secondary)]"
+    >
+      {editing ? "Cancel edit" : "Edit profile"}
+    </button>
   );
 }
 

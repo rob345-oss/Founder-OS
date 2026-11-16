@@ -43,6 +43,12 @@ export const CRM_FOLLOW_UP_PRIORITIES = ["low", "normal", "high", "urgent"] as c
 
 export type CrmFollowUpPriority = (typeof CRM_FOLLOW_UP_PRIORITIES)[number];
 
+export type CrmContactPreferences = {
+  preferredChannel?: "email" | "phone" | "sms" | null;
+  doNotContact?: boolean;
+  notes?: string;
+};
+
 export type CrmContact = {
   id: string;
   tgLeadId: string | null;
@@ -59,6 +65,7 @@ export type CrmContact = {
   relationshipStatus: CrmRelationshipStatus;
   pipelineStage: CrmPipelineStage;
   assignedOwnerId: string | null;
+  contactPreferences: CrmContactPreferences;
   tags: string[];
   marketingConsent: boolean | null;
   nextFollowUpAt: string | null;
@@ -85,6 +92,10 @@ export type CrmContactListItem = Pick<
   | "lastInteractionAt"
   | "dateAdded"
   | "archivedAt"
+  | "tgLeadId"
+  | "countryCode"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 export type CrmNote = {
@@ -138,6 +149,11 @@ export type CrmEmailMessage = {
 
 export type CrmDashboardMetrics = {
   totalContacts: number;
+  totalLeads: number;
+  newLeadsThisWeek: number;
+  waitlistLeads: number;
+  qualifiedLeads: number;
+  recentContacts: CrmContactListItem[];
   activeWaitlist: number;
   activeProspects: number;
   pilotCandidates: number;

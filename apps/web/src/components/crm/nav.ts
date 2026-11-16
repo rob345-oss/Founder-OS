@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Columns3, Contact2, LayoutDashboard, ListChecks, Mail, Users } from "lucide-react";
+import { ClipboardList, Columns3, History, LayoutDashboard, ListChecks, Mail, Users } from "lucide-react";
 
 export type CrmNavItem = {
   href: string;
@@ -14,5 +14,6 @@ export const CRM_NAV: CrmNavItem[] = [
   { href: "/crm/waitlist", label: "Waitlist", icon: ListChecks },
   { href: "/crm/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/crm/follow-ups", label: "Follow-ups", icon: ClipboardList },
-  { href: "/crm/emails", label: "Emails", icon: Mail },
+  { href: "/crm/email", label: "Email", icon: Mail },
+  { href: "/crm/emails", label: "Message log", icon: History },
 ];

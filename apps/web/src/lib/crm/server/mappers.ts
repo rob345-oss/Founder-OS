@@ -2,6 +2,7 @@ import type {
   CrmActivity,
   CrmContact,
   CrmContactListItem,
+  CrmContactPreferences,
   CrmEmailMessage,
   CrmFollowUp,
   CrmNote,
@@ -54,6 +55,7 @@ export function mapContactRow(row: ContactRow): CrmContact {
     relationshipStatus: String(row.relationship_status) as CrmContact["relationshipStatus"],
     pipelineStage: String(row.pipeline_stage) as CrmContact["pipelineStage"],
     assignedOwnerId: row.assigned_owner_id ? String(row.assigned_owner_id) : null,
+    contactPreferences: (parseJsonObject(row.contact_preferences) ?? {}) as CrmContactPreferences,
     tags: parseJsonArray(row.tags),
     marketingConsent:
       row.marketing_consent === null || row.marketing_consent === undefined
@@ -85,6 +87,10 @@ export function mapContactListRow(row: ContactRow): CrmContactListItem {
     lastInteractionAt: c.lastInteractionAt,
     dateAdded: c.dateAdded,
     archivedAt: c.archivedAt,
+    tgLeadId: c.tgLeadId,
+    countryCode: c.countryCode,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
   };
 }
 

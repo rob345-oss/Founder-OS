@@ -5,6 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 
 import { getCrmConfig } from "../config";
+import { ensureCrmEmailCampaignSchema } from "./email-campaign-sqlite";
 import { ensureCrmDataDir } from "./data-dir";
 
 export type CrmDbDriver = "sqlite" | "postgres";
@@ -156,6 +157,7 @@ export function getCrmSqlite(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SQLITE_SCHEMA);
+  ensureCrmEmailCampaignSchema(db, nowIso, newId);
   sqliteInstance = db;
   return db;
 }
@@ -173,6 +175,7 @@ export function resetCrmSqliteForTests(dbPath: string): Database.Database {
   const db = new Database(dbPath);
   db.pragma("foreign_keys = ON");
   db.exec(SQLITE_SCHEMA);
+  ensureCrmEmailCampaignSchema(db, nowIso, newId);
   sqliteInstance = db;
   return db;
 }

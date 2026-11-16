@@ -1,3 +1,4 @@
+import type { DuplicateMatch } from "./duplicate-match";
 import type {
   CrmContact,
   CrmContactListItem,
@@ -75,6 +76,36 @@ export async function createCrmContact(
     method: "POST",
     headers: { ...headers(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as { error?: string; duplicates?: unknown[]; id?: string } & CrmContact;
+  if (res.status === 409) {
+    throw new Error(data.error ?? "A matching contact already exists.");
+  }
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+}
+
+export async function checkCrmContactDuplicates(
+  token: string | null,
+  body: Record<string, unknown>,
+): Promise<DuplicateMatch[]> {
+  const res = await fetch("/api/crm/contacts/check-duplicates", {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ duplicates: DuplicateMatch[] }>(res);
+  return data.duplicates;
+}
+
+export async function runCrmWaitlistBackfill(
+  token: string | null,
+  opts?: { dryRun?: boolean },
+): Promise<{ dryRun: boolean; leadCount: number; examined: number; created: number; updated: number }> {
+  const res = await fetch("/api/crm/sync/waitlist/backfill", {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ dryRun: opts?.dryRun ?? true }),
   });
   return parseJson(res);
 }

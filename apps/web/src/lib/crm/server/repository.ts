@@ -1,11 +1,15 @@
 import type Database from "better-sqlite3";
 
+import { findDuplicatesInList, type DuplicateMatch, type DuplicateProbe } from "../duplicate-match";
+import { isSyntheticCrmEmail } from "../contact-form";
 import { normalizeEmail } from "../normalize";
+import { normalizePhoneDigits, phonesLikelyMatch } from "../normalize-phone";
 import type {
   CrmActivity,
   CrmClassification,
   CrmContact,
   CrmContactListItem,
+  CrmContactPreferences,
   CrmDashboardMetrics,
   CrmEmailMessage,
   CrmFollowUp,
@@ -15,10 +19,20 @@ import type {
   TgLeadRecord,
 } from "../types";
 import {
+  mergeClassifications,
+  mergeContactSource,
+  mergePipelineStage,
+  mergeRelationshipStatus,
+  mergeTags,
+} from "../waitlist-merge";
+import { buildContactListWhere, contactListOrderBy } from "./contact-query";
+import {
   classificationsFromLead,
   contactSourceFromLead,
   relationshipFromLeadStatus,
+  waitlistPipelineForNewLead,
   waitlistSnapshotFromLead,
+  waitlistTagsForLead,
 } from "./lead-map";
 import { mapActivityRow, mapContactListRow, mapContactRow, mapEmailRow, mapFollowUpRow, mapNoteRow } from "./mappers";
 import { getCrmDriver, getCrmSqlite, newId, nowIso, withPgClient } from "./db";
@@ -51,62 +65,45 @@ export type CreateContactInput = {
   pipelineStage?: CrmPipelineStage;
   tags?: string[];
   marketingConsent?: boolean | null;
+  contactPreferences?: CrmContactPreferences;
 };
+
+export type CreateContactResult =
+  | { ok: true; contact: CrmContact }
+  | { ok: false; reason: "duplicate"; duplicates: DuplicateMatch[] };
+
+export type { DuplicateMatch, DuplicateProbe };
+
+function parseClassificationsRow(raw: unknown): CrmClassification[] {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]")) as unknown;
+    return Array.isArray(parsed) ? (parsed.map(String) as CrmClassification[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseTagsRow(raw: unknown): string[] {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]")) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
 
 // --- SQLite implementation ---
 
 function sqliteListContacts(db: Database.Database, query: ContactListQuery): { items: CrmContactListItem[]; total: number } {
-  const where: string[] = [];
-  const params: unknown[] = [];
-
-  if (query.archived) where.push("archived_at IS NOT NULL");
-  else where.push("archived_at IS NULL");
-
-  if (query.q?.trim()) {
-    const like = `%${query.q.trim().toLowerCase()}%`;
-    where.push(
-      "(LOWER(full_name) LIKE ? OR LOWER(primary_email) LIKE ? OR LOWER(COALESCE(phone,'')) LIKE ? OR LOWER(COALESCE(organization,'')) LIKE ?)",
-    );
-    params.push(like, like, like, like);
-  }
-  if (query.classification) {
-    where.push("classifications LIKE ?");
-    params.push(`%"${query.classification}"%`);
-  }
-  if (query.relationshipStatus) {
-    where.push("relationship_status = ?");
-    params.push(query.relationshipStatus);
-  }
-  if (query.pipelineStage) {
-    where.push("pipeline_stage = ?");
-    params.push(query.pipelineStage);
-  }
-  if (query.tag) {
-    where.push("tags LIKE ?");
-    params.push(`%"${query.tag}"%`);
-  }
-  if (query.source) {
-    where.push("contact_source LIKE ?");
-    params.push(`%${query.source}%`);
-  }
-
-  const sortCol =
-    query.sort === "last_interaction"
-      ? "last_interaction_at"
-      : query.sort === "next_follow_up"
-        ? "next_follow_up_at"
-        : "date_added";
-  const dir = query.direction === "asc" ? "ASC" : "DESC";
+  const { clause, params } = buildContactListWhere(query, "sqlite");
+  const orderBy = contactListOrderBy(query, "sqlite");
   const limit = Math.min(Math.max(query.limit ?? 50, 1), 200);
   const offset = Math.max(query.offset ?? 0, 0);
 
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const total = db.prepare(`SELECT COUNT(*) AS c FROM crm_contacts ${whereSql}`).get(...params) as { c: number };
+  const total = db.prepare(`SELECT COUNT(*) AS c FROM crm_contacts WHERE ${clause}`).get(...params) as { c: number };
 
   const rows = db
-    .prepare(
-      `SELECT * FROM crm_contacts ${whereSql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir} LIMIT ? OFFSET ?`,
-    )
+    .prepare(`SELECT * FROM crm_contacts WHERE ${clause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .all(...params, limit, offset) as Record<string, unknown>[];
 
   return { items: rows.map(mapContactListRow), total: total.c };
@@ -138,7 +135,7 @@ function sqliteInsertContact(db: Database.Database, input: CreateContactInput, e
     relationship_status: input.relationshipStatus ?? "new",
     pipeline_stage: input.pipelineStage ?? "new_lead",
     assigned_owner_id: null,
-    contact_preferences: "{}",
+    contact_preferences: JSON.stringify(input.contactPreferences ?? extra?.contactPreferences ?? {}),
     tags: JSON.stringify(input.tags ?? []),
     marketing_consent: input.marketingConsent === undefined ? null : input.marketingConsent ? 1 : 0,
     next_follow_up_at: extra?.nextFollowUpAt ?? null,
@@ -216,24 +213,36 @@ export function upsertContactFromLeadSqlite(db: Database.Database, lead: TgLeadR
   const classifications = classificationsFromLead(lead);
   const relationship = relationshipFromLeadStatus(lead.status);
   const source = contactSourceFromLead(lead);
+  const incomingTags = waitlistTagsForLead(lead);
+  const incomingPipeline = waitlistPipelineForNewLead(lead);
   const ts = nowIso();
 
   if (existingByLead) {
-    const mergedClassifications = [
-      ...new Set([
-        ...JSON.parse(String(existingByLead.classifications ?? "[]")),
-        ...classifications,
-      ]),
-    ];
+    const mergedClassifications = mergeClassifications(parseClassificationsRow(existingByLead.classifications), classifications);
+    const mergedTags = mergeTags(parseTagsRow(existingByLead.tags), incomingTags);
+    const mergedPipeline = mergePipelineStage(
+      String(existingByLead.pipeline_stage) as CrmPipelineStage,
+      incomingPipeline,
+    );
+    const mergedRelationship = mergeRelationshipStatus(
+      String(existingByLead.relationship_status) as CrmRelationshipStatus,
+      relationship,
+    );
+    const mergedSource = mergeContactSource(
+      existingByLead.contact_source ? String(existingByLead.contact_source) : null,
+      source,
+    );
     db.prepare(
       `UPDATE crm_contacts SET
         full_name = COALESCE(NULLIF(?, ''), full_name),
         primary_email = ?,
         primary_email_normalized = ?,
         country_code = COALESCE(?, country_code),
-        contact_source = COALESCE(?, contact_source),
+        contact_source = ?,
         classifications = ?,
         relationship_status = ?,
+        pipeline_stage = ?,
+        tags = ?,
         waitlist_snapshot = ?,
         marketing_consent = COALESCE(?, marketing_consent),
         last_interaction_at = ?,
@@ -244,9 +253,11 @@ export function upsertContactFromLeadSqlite(db: Database.Database, lead: TgLeadR
       lead.email,
       emailNorm,
       lead.country_code ?? null,
-      source,
+      mergedSource,
       JSON.stringify(mergedClassifications),
-      relationship,
+      mergedRelationship,
+      mergedPipeline,
+      JSON.stringify(mergedTags),
       JSON.stringify(snapshot),
       lead.marketing_consent === undefined ? null : lead.marketing_consent ? 1 : 0,
       lead.updated_at ?? ts,
@@ -262,13 +273,30 @@ export function upsertContactFromLeadSqlite(db: Database.Database, lead: TgLeadR
     .get(emailNorm) as Record<string, unknown> | undefined;
 
   if (existingByEmail) {
+    const mergedClassifications = mergeClassifications(parseClassificationsRow(existingByEmail.classifications), classifications);
+    const mergedTags = mergeTags(parseTagsRow(existingByEmail.tags), incomingTags);
+    const mergedPipeline = mergePipelineStage(
+      String(existingByEmail.pipeline_stage) as CrmPipelineStage,
+      incomingPipeline,
+    );
+    const mergedRelationship = mergeRelationshipStatus(
+      String(existingByEmail.relationship_status) as CrmRelationshipStatus,
+      relationship,
+    );
+    const mergedSource = mergeContactSource(
+      existingByEmail.contact_source ? String(existingByEmail.contact_source) : null,
+      source,
+    );
     db.prepare(
-      `UPDATE crm_contacts SET tg_lead_id = ?, waitlist_snapshot = ?, classifications = ?, relationship_status = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE crm_contacts SET tg_lead_id = ?, contact_source = ?, waitlist_snapshot = ?, classifications = ?, relationship_status = ?, pipeline_stage = ?, tags = ?, updated_at = ? WHERE id = ?`,
     ).run(
       lead.id,
+      mergedSource,
       JSON.stringify(snapshot),
-      JSON.stringify([...new Set([...JSON.parse(String(existingByEmail.classifications ?? "[]")), ...classifications])]),
-      relationship,
+      JSON.stringify(mergedClassifications),
+      mergedRelationship,
+      mergedPipeline,
+      JSON.stringify(mergedTags),
       ts,
       existingByEmail.id,
     );
@@ -290,6 +318,8 @@ export function upsertContactFromLeadSqlite(db: Database.Database, lead: TgLeadR
       contactSource: source,
       classifications,
       relationshipStatus: relationship,
+      pipelineStage: incomingPipeline,
+      tags: incomingTags,
       marketingConsent: lead.marketing_consent ?? null,
     },
     {
@@ -349,26 +379,87 @@ async function upsertContactFromLeadPg(
   const classifications = classificationsFromLead(lead);
   const relationship = relationshipFromLeadStatus(lead.status);
   const source = contactSourceFromLead(lead);
+  const incomingTags = waitlistTagsForLead(lead);
+  const incomingPipeline = waitlistPipelineForNewLead(lead);
   const ts = nowIso();
 
-  const existing = (await query("SELECT id FROM crm_contacts WHERE tg_lead_id = $1", [lead.id])) as { id: string }[];
-  if (existing[0]) {
+  const existingRows = (await query("SELECT * FROM crm_contacts WHERE tg_lead_id = $1", [lead.id])) as Record<string, unknown>[];
+  const existingByLead = existingRows[0];
+
+  if (existingByLead) {
+    const mergedClassifications = mergeClassifications(parseClassificationsRow(existingByLead.classifications), classifications);
+    const mergedTags = mergeTags(parseTagsRow(existingByLead.tags), incomingTags);
+    const mergedPipeline = mergePipelineStage(
+      String(existingByLead.pipeline_stage) as CrmPipelineStage,
+      incomingPipeline,
+    );
+    const mergedRelationship = mergeRelationshipStatus(
+      String(existingByLead.relationship_status) as CrmRelationshipStatus,
+      relationship,
+    );
+    const mergedSource = mergeContactSource(
+      existingByLead.contact_source ? String(existingByLead.contact_source) : null,
+      source,
+    );
     await query(
       `UPDATE crm_contacts SET full_name = COALESCE(NULLIF($1, ''), full_name), primary_email = $2,
-       primary_email_normalized = $3, waitlist_snapshot = $4::jsonb, classifications = $5::jsonb,
-       relationship_status = $6, contact_source = COALESCE($7, contact_source), updated_at = $8
-       WHERE tg_lead_id = $9`,
+       primary_email_normalized = $3, country_code = COALESCE($4, country_code), waitlist_snapshot = $5::jsonb,
+       classifications = $6::jsonb, relationship_status = $7, pipeline_stage = $8, tags = $9::jsonb,
+       contact_source = $10, updated_at = $11
+       WHERE tg_lead_id = $12`,
       [
         lead.name?.trim() ?? "",
         lead.email,
         emailNorm,
+        lead.country_code ?? null,
         JSON.stringify(snapshot),
-        JSON.stringify(classifications),
-        relationship,
-        source,
+        JSON.stringify(mergedClassifications),
+        mergedRelationship,
+        mergedPipeline,
+        JSON.stringify(mergedTags),
+        mergedSource,
         ts,
         lead.id,
       ],
+    );
+    return { created: false };
+  }
+
+  const emailRows = (await query(
+    "SELECT * FROM crm_contacts WHERE primary_email_normalized = $1 AND archived_at IS NULL",
+    [emailNorm],
+  )) as Record<string, unknown>[];
+  if (emailRows[0]) {
+    const row = emailRows[0];
+    const mergedClassifications = mergeClassifications(parseClassificationsRow(row.classifications), classifications);
+    const mergedTags = mergeTags(parseTagsRow(row.tags), incomingTags);
+    const mergedPipeline = mergePipelineStage(String(row.pipeline_stage) as CrmPipelineStage, incomingPipeline);
+    const mergedRelationship = mergeRelationshipStatus(
+      String(row.relationship_status) as CrmRelationshipStatus,
+      relationship,
+    );
+    const mergedSource = mergeContactSource(row.contact_source ? String(row.contact_source) : null, source);
+    await query(
+      `UPDATE crm_contacts SET tg_lead_id = $2, contact_source = $3, waitlist_snapshot = $4::jsonb,
+       classifications = $5::jsonb, relationship_status = $6, pipeline_stage = $7, tags = $8::jsonb, updated_at = $9
+       WHERE id = $1`,
+      [
+        row.id,
+        lead.id,
+        mergedSource,
+        JSON.stringify(snapshot),
+        JSON.stringify(mergedClassifications),
+        mergedRelationship,
+        mergedPipeline,
+        JSON.stringify(mergedTags),
+        ts,
+      ],
+    );
+    await query(
+      `INSERT INTO crm_activities (contact_id, event_type, source, idempotency_key, payload, occurred_at)
+       VALUES ($1, 'joined_waitlist', 'waitlist', $2, $3::jsonb, $4)
+       ON CONFLICT (contact_id, idempotency_key) DO NOTHING`,
+      [row.id, `lead:${lead.id}:joined_waitlist`, JSON.stringify({ tgLeadId: lead.id, topic: lead.topic }), lead.created_at ?? ts],
     );
     return { created: false };
   }
@@ -377,9 +468,9 @@ async function upsertContactFromLeadPg(
   await query(
     `INSERT INTO crm_contacts (
       id, tg_lead_id, full_name, primary_email, primary_email_normalized, country_code,
-      contact_source, classifications, relationship_status, pipeline_stage, waitlist_snapshot,
+      contact_source, classifications, relationship_status, pipeline_stage, tags, waitlist_snapshot,
       last_interaction_at, date_added, created_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,'new_lead',$10::jsonb,$11,$12,$13,$14)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::jsonb,$13,$14,$15,$16)
     ON CONFLICT (tg_lead_id) DO NOTHING`,
     [
       id,
@@ -391,6 +482,8 @@ async function upsertContactFromLeadPg(
       source,
       JSON.stringify(classifications),
       relationship,
+      incomingPipeline,
+      JSON.stringify(incomingTags),
       JSON.stringify(snapshot),
       lead.updated_at ?? lead.created_at ?? ts,
       lead.created_at ?? ts,
@@ -409,17 +502,112 @@ async function upsertContactFromLeadPg(
   return { created: true };
 }
 
+function rowToDuplicateListContact(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    primaryEmail: String(row.primary_email),
+    tgLeadId: row.tg_lead_id ? String(row.tg_lead_id) : null,
+    phone: row.phone ? String(row.phone) : null,
+    fullName: String(row.full_name ?? ""),
+  };
+}
+
+function collectSqliteDuplicateRows(db: Database.Database, probe: DuplicateProbe): ReturnType<typeof rowToDuplicateListContact>[] {
+  const out: ReturnType<typeof rowToDuplicateListContact>[] = [];
+  const seen = new Set<string>();
+
+  const pushRow = (row: Record<string, unknown> | undefined) => {
+    if (!row) return;
+    const id = String(row.id);
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(rowToDuplicateListContact(row));
+  };
+
+  if (probe.primaryEmail && !isSyntheticCrmEmail(probe.primaryEmail)) {
+    pushRow(
+      db
+        .prepare("SELECT * FROM crm_contacts WHERE primary_email_normalized = ? AND archived_at IS NULL")
+        .get(normalizeEmail(probe.primaryEmail)) as Record<string, unknown> | undefined,
+    );
+  }
+  if (probe.tgLeadId) {
+    pushRow(db.prepare("SELECT * FROM crm_contacts WHERE tg_lead_id = ?").get(probe.tgLeadId) as Record<string, unknown> | undefined);
+  }
+  if (probe.phone) {
+    const rows = db
+      .prepare("SELECT * FROM crm_contacts WHERE archived_at IS NULL AND phone IS NOT NULL")
+      .all() as Record<string, unknown>[];
+    for (const row of rows) {
+      if (phonesLikelyMatch(probe.phone, String(row.phone))) pushRow(row);
+    }
+  }
+
+  return out;
+}
+
+async function collectPgDuplicateRows(
+  query: (sql: string, params?: unknown[]) => Promise<unknown[]>,
+  probe: DuplicateProbe,
+): Promise<ReturnType<typeof rowToDuplicateListContact>[]> {
+  const out: ReturnType<typeof rowToDuplicateListContact>[] = [];
+  const seen = new Set<string>();
+  const pushRow = (row: Record<string, unknown> | undefined) => {
+    if (!row) return;
+    const id = String(row.id);
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(rowToDuplicateListContact(row));
+  };
+
+  if (probe.primaryEmail && !isSyntheticCrmEmail(probe.primaryEmail)) {
+    const rows = (await query(
+      "SELECT * FROM crm_contacts WHERE primary_email_normalized = $1 AND archived_at IS NULL",
+      [normalizeEmail(probe.primaryEmail)],
+    )) as Record<string, unknown>[];
+    pushRow(rows[0]);
+  }
+  if (probe.tgLeadId) {
+    const rows = (await query("SELECT * FROM crm_contacts WHERE tg_lead_id = $1", [probe.tgLeadId])) as Record<string, unknown>[];
+    pushRow(rows[0]);
+  }
+  if (probe.phone) {
+    const rows = (await query("SELECT * FROM crm_contacts WHERE archived_at IS NULL AND phone IS NOT NULL")) as Record<
+      string,
+      unknown
+    >[];
+    for (const row of rows) {
+      if (phonesLikelyMatch(probe.phone, String(row.phone))) pushRow(row);
+    }
+  }
+  return out;
+}
+
+export async function findContactDuplicates(probe: DuplicateProbe): Promise<DuplicateMatch[]> {
+  if (getCrmDriver() === "postgres") {
+    return withPgClient(async (q) => {
+      const candidates = await collectPgDuplicateRows(q, probe);
+      return findDuplicatesInList(probe, candidates);
+    });
+  }
+  const candidates = collectSqliteDuplicateRows(getCrmSqlite(), probe);
+  return findDuplicatesInList(probe, candidates);
+}
+
 export async function listContacts(query: ContactListQuery): Promise<{ items: CrmContactListItem[]; total: number }> {
   if (getCrmDriver() === "postgres") {
     return withPgClient(async (q) => {
+      const { clause, params } = buildContactListWhere(query, "postgres");
+      const orderBy = contactListOrderBy(query, "postgres");
       const limit = Math.min(Math.max(query.limit ?? 50, 1), 200);
       const offset = Math.max(query.offset ?? 0, 0);
-      const where = query.archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
+      const limitIdx = params.length + 1;
+      const offsetIdx = params.length + 2;
       const rows = (await q(
-        `SELECT * FROM crm_contacts WHERE ${where} ORDER BY date_added DESC LIMIT $1 OFFSET $2`,
-        [limit, offset],
+        `SELECT * FROM crm_contacts WHERE ${clause} ORDER BY ${orderBy} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...params, limit, offset],
       )) as Record<string, unknown>[];
-      const totalRows = (await q(`SELECT COUNT(*)::int AS c FROM crm_contacts WHERE ${where}`)) as { c: number }[];
+      const totalRows = (await q(`SELECT COUNT(*)::int AS c FROM crm_contacts WHERE ${clause}`, params)) as { c: number }[];
       return { items: rows.map(mapContactListRow), total: totalRows[0]?.c ?? 0 };
     });
   }
@@ -436,7 +624,22 @@ export async function getContact(id: string): Promise<CrmContact | null> {
   return sqliteGetContact(getCrmSqlite(), id);
 }
 
-export async function createContact(input: CreateContactInput, authorUserId: string): Promise<CrmContact> {
+export async function createContact(
+  input: CreateContactInput,
+  authorUserId: string,
+  opts?: { skipDuplicateCheck?: boolean },
+): Promise<CreateContactResult> {
+  if (!opts?.skipDuplicateCheck) {
+    const duplicates = await findContactDuplicates({
+      primaryEmail: input.primaryEmail,
+      phone: input.phone,
+      tgLeadId: null,
+    });
+    if (duplicates.length > 0) {
+      return { ok: false, reason: "duplicate", duplicates };
+    }
+  }
+
   if (getCrmDriver() === "postgres") {
     return withPgClient(async (q) => {
       const id = newId();
@@ -446,8 +649,8 @@ export async function createContact(input: CreateContactInput, authorUserId: str
         `INSERT INTO crm_contacts (
           id, full_name, primary_email, primary_email_normalized, additional_emails, phone, country_code,
           preferred_language, organization, contact_source, classifications, relationship_status, pipeline_stage,
-          tags, marketing_consent, last_interaction_at, date_added, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15,$16,$17,$18,$19)`,
+          contact_preferences, tags, marketing_consent, last_interaction_at, date_added, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20)`,
         [
           id,
           input.fullName?.trim() ?? "",
@@ -462,6 +665,7 @@ export async function createContact(input: CreateContactInput, authorUserId: str
           JSON.stringify(input.classifications ?? ["general_contact"]),
           input.relationshipStatus ?? "new",
           input.pipelineStage ?? "new_lead",
+          JSON.stringify(input.contactPreferences ?? {}),
           JSON.stringify(input.tags ?? []),
           input.marketingConsent ?? null,
           ts,
@@ -477,7 +681,7 @@ export async function createContact(input: CreateContactInput, authorUserId: str
         [id, `contact:${id}:created`, JSON.stringify({ authorUserId }), ts],
       );
       const rows = (await q("SELECT * FROM crm_contacts WHERE id = $1", [id])) as Record<string, unknown>[];
-      return mapContactRow(rows[0]);
+      return { ok: true, contact: mapContactRow(rows[0]) };
     });
   }
   const db = getCrmSqlite();
@@ -485,7 +689,7 @@ export async function createContact(input: CreateContactInput, authorUserId: str
   sqliteRecordActivity(db, contact.id, "contact_created", { authorUserId }, {
     idempotencyKey: `contact:${contact.id}:created`,
   });
-  return contact;
+  return { ok: true, contact };
 }
 
 export async function updateContact(
@@ -801,6 +1005,21 @@ export async function getDashboardMetrics(): Promise<CrmDashboardMetrics> {
 
 async function buildDashboardFromQuery(q: (sql: string, params?: unknown[]) => Promise<unknown[]>): Promise<CrmDashboardMetrics> {
   const totalRows = (await q("SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL")) as { c: number }[];
+  const totalLeadsRows = (await q(
+    `SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL AND pipeline_stage IN ('new_lead','contacted','interested')`,
+  )) as { c: number }[];
+  const newWeekRows = (await q(
+    `SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL AND date_added >= now() - interval '7 days'`,
+  )) as { c: number }[];
+  const waitlistLeadsRows = (await q(
+    `SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL AND classifications::text LIKE '%waitlist_candidate%'`,
+  )) as { c: number }[];
+  const qualifiedRows = (await q(
+    `SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL AND pipeline_stage = 'qualified'`,
+  )) as { c: number }[];
+  const recentRows = (await q(
+    "SELECT * FROM crm_contacts WHERE archived_at IS NULL ORDER BY created_at DESC NULLS LAST LIMIT 8",
+  )) as Record<string, unknown>[];
   const waitlistRows = (await q(
     `SELECT COUNT(*)::int AS c FROM crm_contacts WHERE archived_at IS NULL AND classifications::text LIKE '%waitlist_candidate%'`,
   )) as { c: number }[];
@@ -825,6 +1044,11 @@ async function buildDashboardFromQuery(q: (sql: string, params?: unknown[]) => P
   const activityRows = (await q("SELECT * FROM crm_activities ORDER BY occurred_at DESC LIMIT 12")) as Record<string, unknown>[];
   return {
     totalContacts: totalRows[0]?.c ?? 0,
+    totalLeads: totalLeadsRows[0]?.c ?? 0,
+    newLeadsThisWeek: newWeekRows[0]?.c ?? 0,
+    waitlistLeads: waitlistLeadsRows[0]?.c ?? 0,
+    qualifiedLeads: qualifiedRows[0]?.c ?? 0,
+    recentContacts: recentRows.map(mapContactListRow),
     activeWaitlist: waitlistRows[0]?.c ?? 0,
     activeProspects: prospectRows[0]?.c ?? 0,
     pilotCandidates: pilotRows[0]?.c ?? 0,
@@ -860,6 +1084,24 @@ async function followUpBucketsPg(q: (sql: string, params?: unknown[]) => Promise
 
 function buildDashboardSqlite(db: Database.Database): CrmDashboardMetrics {
   const total = db.prepare("SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL").get() as { c: number };
+  const totalLeads = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL AND pipeline_stage IN ('new_lead','contacted','interested')`,
+    )
+    .get() as { c: number };
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const newWeek = db
+    .prepare(`SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL AND date_added >= ?`)
+    .get(weekAgo) as { c: number };
+  const waitlistLeads = db
+    .prepare(`SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL AND classifications LIKE '%waitlist_candidate%'`)
+    .get() as { c: number };
+  const qualified = db
+    .prepare(`SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL AND pipeline_stage = 'qualified'`)
+    .get() as { c: number };
+  const recentRows = db
+    .prepare("SELECT * FROM crm_contacts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT 8")
+    .all() as Record<string, unknown>[];
   const waitlist = db
     .prepare(`SELECT COUNT(*) AS c FROM crm_contacts WHERE archived_at IS NULL AND classifications LIKE '%waitlist_candidate%'`)
     .get() as { c: number };
@@ -922,6 +1164,11 @@ function buildDashboardSqlite(db: Database.Database): CrmDashboardMetrics {
 
   return {
     totalContacts: total.c,
+    totalLeads: totalLeads.c,
+    newLeadsThisWeek: newWeek.c,
+    waitlistLeads: waitlistLeads.c,
+    qualifiedLeads: qualified.c,
+    recentContacts: recentRows.map(mapContactListRow),
     activeWaitlist: waitlist.c,
     activeProspects: prospects.c,
     pilotCandidates: pilot.c,
