@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 
 import { useCrmSession } from "@/components/crm/useCrmSession";
 import { addCrmNote, fetchCrmContact } from "@/lib/crm/client-api";
+import { fetchContactEmailActivity } from "@/lib/crm/email-client-api";
+import type { CrmEmailActivityItem } from "@/lib/crm/email/types";
 import type { CrmActivity, CrmContact, CrmEmailMessage, CrmFollowUp, CrmNote } from "@/lib/crm/types";
 
 export default function CrmContactProfilePage() {
@@ -15,6 +17,7 @@ export default function CrmContactProfilePage() {
   const [activities, setActivities] = useState<CrmActivity[]>([]);
   const [emails, setEmails] = useState<CrmEmailMessage[]>([]);
   const [followUps, setFollowUps] = useState<CrmFollowUp[]>([]);
+  const [campaignEmails, setCampaignEmails] = useState<CrmEmailActivityItem[]>([]);
   const [noteBody, setNoteBody] = useState("");
   const [tab, setTab] = useState<"overview" | "notes" | "emails" | "timeline" | "followups" | "waitlist">("overview");
 
@@ -26,6 +29,7 @@ export default function CrmContactProfilePage() {
     setActivities(data.activities);
     setEmails(data.emails);
     setFollowUps(data.followUps);
+    setCampaignEmails(await fetchContactEmailActivity(token, params.id));
   }, [token, params.id]);
 
   useEffect(() => {
@@ -64,7 +68,7 @@ export default function CrmContactProfilePage() {
           [
             ["overview", "Overview"],
             ["notes", "Notes"],
-            ["emails", "Email history"],
+            ["emails", "Email activity"],
             ["timeline", "Timeline"],
             ["followups", "Follow-ups"],
             ["waitlist", "Waitlist"],
@@ -125,6 +129,15 @@ export default function CrmContactProfilePage() {
 
         {tab === "emails" && (
           <ul className="space-y-2 text-sm">
+            {campaignEmails.map((m) => (
+              <li key={m.id} className="rounded-md border border-[var(--studio-border)] p-3">
+                <p className="font-medium text-[var(--studio-text-primary)]">{m.eventType.replaceAll("_", " ")}</p>
+                <p className="text-xs text-[var(--studio-text-tertiary)]">
+                  {new Date(m.occurredAt).toLocaleString()} · {m.source}
+                  {m.campaignName ? ` · ${m.campaignName}` : ""}
+                </p>
+              </li>
+            ))}
             {emails.map((m) => (
               <li key={m.id} className="rounded-md border border-[var(--studio-border)] p-3">
                 <p className="font-medium text-[var(--studio-text-primary)]">{m.subject ?? "(no subject)"}</p>
@@ -133,7 +146,7 @@ export default function CrmContactProfilePage() {
                 </p>
               </li>
             ))}
-            {!emails.length && (
+            {!emails.length && !campaignEmails.length && (
               <p className="text-[var(--studio-text-tertiary)]">
                 No CRM email rows yet. Transactional waitlist email is sent by TG via SendGrid/SMTP; ingest webhooks can populate this
                 table later.

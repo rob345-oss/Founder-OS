@@ -3,6 +3,10 @@
     {
       "path": "/api/crm/cron/sync-waitlist",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/crm/cron/email-dispatch",
+      "schedule": "*/2 * * * *"
     }
   ]
 }
