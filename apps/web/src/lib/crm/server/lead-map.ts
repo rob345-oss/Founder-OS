@@ -1,5 +1,4 @@
-import type { CrmClassification, CrmPipelineStage, CrmRelationshipStatus, TgLeadRecord } from "../types";
-import { waitlistLeadSource } from "../waitlist-merge";
+import type { CrmClassification, CrmRelationshipStatus, TgLeadRecord } from "../types";
 
 export function classificationsFromLead(lead: TgLeadRecord): CrmClassification[] {
   const base: CrmClassification[] = [];
@@ -54,19 +53,7 @@ export function waitlistSnapshotFromLead(lead: TgLeadRecord): Record<string, unk
 }
 
 export function contactSourceFromLead(lead: TgLeadRecord): string {
-  if (lead.topic === "waitlist") return waitlistLeadSource;
   if (lead.utm_source) return `utm:${lead.utm_source}`;
   if (lead.page) return `page:${lead.page}`;
   return `topic:${lead.topic}`;
-}
-
-export function waitlistTagsForLead(lead: TgLeadRecord): string[] {
-  const tags = ["waitlist"];
-  if (lead.beta_testing_interest) tags.push("beta-interest");
-  if (lead.country_code) tags.push(`country:${lead.country_code.toLowerCase()}`);
-  return tags;
-}
-
-export function waitlistPipelineForNewLead(_lead: TgLeadRecord): CrmPipelineStage {
-  return "new_lead";
 }
