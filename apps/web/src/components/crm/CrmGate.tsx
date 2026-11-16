@@ -2,57 +2,27 @@
 
 import type { ReactNode } from "react";
 
-import { crmBtnPrimary, crmBtnSecondary } from "./crmUi";
+import { TgSuperAdminAccessPanel } from "@/components/tg/TgSuperAdminAccessPanel";
+
 import { useCrmSession } from "./useCrmSession";
 
 export function CrmGate({ children }: { children: ReactNode }) {
-  const { loading, session, error, refresh, supabase } = useCrmSession();
+  const { loading, session, error, refresh, hasBearer } = useCrmSession();
 
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-12 text-sm text-[var(--studio-text-secondary)]">
-        Verifying super_admin access…
-      </div>
-    );
+  if (session?.authorized) {
+    return <>{children}</>;
   }
 
-  if (!session?.authorized) {
-    return (
-      <div className="mx-auto flex max-w-lg flex-1 flex-col justify-center gap-4 p-10">
-        <h1 className="text-xl font-semibold text-[var(--studio-text-primary)]">CRM access restricted</h1>
-        <p className="text-sm leading-relaxed text-[var(--studio-text-secondary)]">
-          This area contains private contact data. Sign in with a Titanium Guardian account that has the backend{" "}
-          <code className="text-[var(--studio-text-primary)]">super_admin</code> role.
-        </p>
-        {error && (
-          <p className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-xs text-red-200">{error}</p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`w-fit ${crmBtnPrimary}`}
-            onClick={() =>
-              void supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: { redirectTo: `${window.location.origin}/crm` },
-              })
-            }
-          >
-            Sign in
-          </button>
-          {error ? (
-            <button
-              type="button"
-              className={`w-fit ${crmBtnSecondary}`}
-              onClick={() => void refresh()}
-            >
-              Retry verification
-            </button>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+  return (
+    <TgSuperAdminAccessPanel
+      productName="CRM"
+      returnPath="/crm"
+      loading={loading}
+      authorized={Boolean(session?.authorized)}
+      hasBearer={hasBearer}
+      email={session?.email}
+      error={error}
+      onRetry={refresh}
+    />
+  );
 }

@@ -8,6 +8,7 @@ export default defineConfig({
       "src/lib/studio/server/__tests__/**/*.test.ts",
       "src/lib/crm/__tests__/**/*.test.ts",
       "src/lib/marketing/__tests__/**/*.test.ts",
+      "src/lib/tg/__tests__/**/*.test.ts",
       "../../packages/studio/src/__tests__/**/*.test.ts",
     ],
   },

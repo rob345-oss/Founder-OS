@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/client";
 import type { CrmSessionInfo } from "@/lib/crm/client-api";
 import { fetchCrmSessionDeduped, logCrmSessionDiag } from "@/lib/crm/session-fetch";
+import { resolveActiveBearerToken } from "@/lib/tg/resolve-bearer";
+import { useTgBearerAuth } from "@/lib/tg/use-tg-bearer-auth";
 
 type CrmSessionContextValue = {
   token: string | null;
@@ -13,47 +13,23 @@ type CrmSessionContextValue = {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  supabase: SupabaseClient;
+  hasBearer: boolean;
   canUseCrm: boolean;
 };
 
 const CrmSessionContext = createContext<CrmSessionContextValue | null>(null);
 
 export function CrmSessionProvider({ children }: { children: ReactNode }) {
-  const supabase = useMemo(() => createClient(), []);
-  const [authReady, setAuthReady] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const { token, authReady } = useTgBearerAuth();
   const [session, setSession] = useState<CrmSessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setToken(data.session?.access_token ?? null);
-      setAuthReady(true);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (cancelled) return;
-      setToken(nextSession?.access_token ?? null);
-      setAuthReady(true);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
-
   const refresh = useCallback(async () => {
     if (!authReady) return;
 
-    if (!token) {
+    const bearer = await resolveActiveBearerToken();
+    if (!bearer) {
       setSession({ authorized: false });
       setError(null);
       setLoading(false);
@@ -63,7 +39,7 @@ export function CrmSessionProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const started = performance.now();
     try {
-      const info = await fetchCrmSessionDeduped(token);
+      const info = await fetchCrmSessionDeduped(bearer);
       setSession(info);
       setError(null);
       logCrmSessionDiag(performance.now() - started, info.authorized ? "authorized" : "denied");
@@ -88,10 +64,10 @@ export function CrmSessionProvider({ children }: { children: ReactNode }) {
       loading: !authReady || loading,
       error,
       refresh,
-      supabase,
+      hasBearer: Boolean(token),
       canUseCrm: Boolean(session?.authorized),
     }),
-    [token, session, authReady, loading, error, refresh, supabase],
+    [token, session, authReady, loading, error, refresh],
   );
 
   return <CrmSessionContext.Provider value={value}>{children}</CrmSessionContext.Provider>;

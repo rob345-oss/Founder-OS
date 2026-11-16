@@ -1,24 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+
 import { fetchMarketingSession } from "@/lib/marketing/client-api";
+import { getStoredTgAccessToken } from "@/lib/tg/browser-tokens";
 
 export function MarketingHomeLink() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient();
-    void supabase.auth.getSession().then(async ({ data }) => {
-      const token = data.session?.access_token;
-      if (!token) return;
-      try {
-        const session = await fetchMarketingSession(token);
-        setVisible(session.authorized);
-      } catch {
-        setVisible(false);
-      }
-    });
+    const token = getStoredTgAccessToken();
+    if (!token) return;
+    void fetchMarketingSession(token)
+      .then((session) => setVisible(session.authorized))
+      .catch(() => setVisible(false));
   }, []);
 
   if (!visible) return null;
