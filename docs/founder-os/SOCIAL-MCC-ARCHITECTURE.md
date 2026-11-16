@@ -47,7 +47,7 @@ On `staging.titaniumguardian.com`, `/marketing/*` HTML is **rewritten** to the `
 {
   "source": "/founder-os-assets/_next/:path*",
   "has": [{ "type": "host", "value": "staging.titaniumguardian.com" }],
-  "destination": "https://founder-os-web-blush.vercel.app/_next/:path*"
+  "destination": "https://founder-os-web-blush.vercel.app/founder-os-assets/_next/:path*"
 }
 ```
 
