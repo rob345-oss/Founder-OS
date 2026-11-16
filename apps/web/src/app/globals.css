@@ -108,3 +108,62 @@ body {
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+
+/* Marketing Command Center — warm light shell (Apple-grade restraint) */
+.studio-root.marketing-command-center {
+  --studio-bg-0: #f5f4f0;
+  --studio-bg-1: #faf9f6;
+  --studio-bg-2: #ffffff;
+  --studio-bg-3: #f0eeea;
+  --studio-bg-elevated: #ffffff;
+  --studio-bg-hover: #ebe9e4;
+  --studio-border: rgba(26, 47, 74, 0.1);
+  --studio-border-strong: rgba(26, 47, 74, 0.16);
+  --studio-text-primary: #1a2f4a;
+  --studio-text-secondary: #4a5c70;
+  --studio-text-tertiary: #7a8796;
+  --studio-accent: #1a2f4a;
+  --studio-accent-muted: rgba(26, 47, 74, 0.08);
+  --studio-accent-glow: rgba(26, 47, 74, 0.12);
+  --studio-success: #1d7a52;
+  --studio-warning: #b8860b;
+  --studio-danger: #c23c3c;
+  --studio-shadow-panel: 0 1px 2px rgba(26, 47, 74, 0.04), 0 8px 24px rgba(26, 47, 74, 0.06);
+  --studio-focus-ring: 0 0 0 2px var(--studio-bg-0), 0 0 0 4px var(--studio-accent);
+  color: var(--studio-text-primary);
+  background: var(--studio-bg-0);
+  -webkit-font-smoothing: antialiased;
+}
+
+.studio-root.marketing-command-center .studio-subtle-grid {
+  background-image:
+    linear-gradient(rgba(26, 47, 74, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 47, 74, 0.04) 1px, transparent 1px);
+}
+
+.marketing-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--studio-bg-3) 0%,
+    var(--studio-bg-hover) 50%,
+    var(--studio-bg-3) 100%
+  );
+  background-size: 200% 100%;
+  animation: marketing-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes marketing-skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-skeleton {
+    animation: none;
+    background: var(--studio-bg-3);
+  }
+}

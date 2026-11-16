@@ -37,6 +37,20 @@
 - AI writing assistant (M2/M4)
 - Demo/fake KPI seed data
 
+## Staging host + static assets
+
+On `staging.titaniumguardian.com`, `/marketing/*` HTML is **rewritten** to the `founder-os-web` Vercel project (see `.tg-ref/frontend/vercel.json`). Relative `/_next/static/*` URLs in that HTML would otherwise resolve on the **Titanium Guardian frontend** and load the wrong CSS bundle (unstyled marketing UI).
+
+**Fix:** set `FOUNDER_OS_ASSET_PREFIX=/founder-os-assets` on the **founder-os-web** Vercel project at build time (`apps/web/next.config.ts`), deploy founder-os-web, then deploy the TG frontend (`frontend/vercel.json` on the Titanium Guardian repo) with this additional rewrite:
+
+```json
+{
+  "source": "/founder-os-assets/_next/:path*",
+  "has": [{ "type": "host", "value": "staging.titaniumguardian.com" }],
+  "destination": "https://founder-os-web-blush.vercel.app/_next/:path*"
+}
+```
+
 ## Staging
 
 Apply migrations only to staging Postgres:

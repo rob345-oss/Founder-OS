@@ -16,14 +16,14 @@ import { SOCIAL_PLATFORM_LABELS } from "@/lib/marketing/social-types";
 const KPI_LABELS: { key: keyof SocialOverviewResponse["kpis"]; label: string; suffix?: string }[] = [
   { key: "impressions", label: "Impressions" },
   { key: "reach", label: "Reach" },
+  { key: "engagementRate", label: "Engagement Rate", suffix: "%" },
+  { key: "followerGrowth", label: "Followers Gained" },
+  { key: "websiteClicks", label: "Website Clicks" },
+  { key: "waitlistSignups", label: "Waitlist Conversions" },
   { key: "engagements", label: "Engagements" },
-  { key: "engagementRate", label: "Engagement rate", suffix: "%" },
-  { key: "followerGrowth", label: "Follower growth" },
-  { key: "profileVisits", label: "Profile visits" },
-  { key: "websiteClicks", label: "Website clicks" },
-  { key: "waitlistSignups", label: "Waitlist signups" },
-  { key: "postsPublished", label: "Posts published" },
-  { key: "postsScheduled", label: "Scheduled posts" },
+  { key: "profileVisits", label: "Profile Visits" },
+  { key: "postsPublished", label: "Posts Published" },
+  { key: "postsScheduled", label: "Scheduled Posts" },
 ];
 
 export default function SocialCommandOverviewPage() {
@@ -69,15 +69,7 @@ export default function SocialCommandOverviewPage() {
               metrics.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <MarketingDateRangePicker value={preset} onChange={setPreset} />
-            <Link
-              href="/marketing/social/create"
-              className="rounded-[var(--studio-radius-md)] bg-[var(--studio-accent)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90"
-            >
-              Create post
-            </Link>
-          </div>
+          <MarketingDateRangePicker value={preset} onChange={setPreset} />
         </header>
 
         {data ? <SocialPublishBanner armed={data.publishArmed} /> : null}

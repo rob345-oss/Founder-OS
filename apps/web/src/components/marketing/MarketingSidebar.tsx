@@ -65,7 +65,7 @@ export function MarketingSidebar() {
           {!collapsed ? <span>Founder OS</span> : null}
         </Link>
         <div className={["flex items-center gap-2", collapsed ? "justify-center" : ""].join(" ")}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--studio-radius-sm)] border border-[var(--studio-border-strong)] bg-gradient-to-br from-[rgba(91,140,255,0.25)] to-[rgba(120,90,255,0.12)] text-[var(--studio-accent)]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--studio-radius-sm)] border border-[var(--studio-border-strong)] bg-[var(--studio-accent-muted)] text-[var(--studio-accent)]">
             <LineChart className="h-4 w-4" aria-hidden />
           </div>
           {!collapsed ? (
@@ -169,7 +169,7 @@ function NavItems({
             className={[
               "group flex items-center gap-3 rounded-[var(--studio-radius-md)] px-3 py-2.5 text-sm transition-[background,color,box-shadow]",
               active
-                ? "bg-[var(--studio-accent-muted)] text-[var(--studio-text-primary)] shadow-[inset_0_0_0_1px_rgba(91,140,255,0.25)]"
+                ? "bg-[var(--studio-accent-muted)] text-[var(--studio-text-primary)] shadow-[inset_0_0_0_1px_var(--studio-border-strong)]"
                 : "text-[var(--studio-text-secondary)] hover:bg-[var(--studio-bg-hover)] hover:text-[var(--studio-text-primary)]",
               collapsed ? "justify-center px-2" : "",
             ].join(" ")}

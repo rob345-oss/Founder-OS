@@ -23,7 +23,7 @@ export function MarketingKPICard({
 }) {
   const body = (
     <div className="group relative overflow-hidden rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-4 shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-[var(--studio-border-strong)]">
-      <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[radial-gradient(circle,rgba(91,140,255,0.12),transparent_70%)]" />
+      <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[radial-gradient(circle,var(--studio-accent-glow),transparent_70%)]" />
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--studio-text-tertiary)]">{label}</p>
       {metric.status === "live" ? (
         <>
