@@ -62,6 +62,107 @@ CREATE TABLE IF NOT EXISTS marketing_settings (
   data_refresh_note TEXT,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS marketing_social_accounts (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL,
+  account_label TEXT,
+  external_account_id TEXT,
+  connection_state TEXT NOT NULL DEFAULT 'not_connected',
+  capabilities TEXT NOT NULL DEFAULT '[]',
+  last_sync_at TEXT,
+  health_note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_social_posts (
+  id TEXT PRIMARY KEY,
+  internal_label TEXT,
+  body_text TEXT NOT NULL DEFAULT '',
+  platform TEXT NOT NULL,
+  campaign_id TEXT,
+  status TEXT NOT NULL DEFAULT 'idea',
+  scheduled_at TEXT,
+  published_at TEXT,
+  platform_permalink TEXT,
+  destination_url TEXT,
+  cta_text TEXT,
+  hashtags TEXT,
+  topic_tags TEXT NOT NULL DEFAULT '[]',
+  media_refs TEXT NOT NULL DEFAULT '[]',
+  external_publish_state TEXT NOT NULL DEFAULT 'planned',
+  publish_error TEXT,
+  is_manual_track_only INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_social_post_metrics (
+  id TEXT PRIMARY KEY,
+  post_id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  provider_snapshot_id TEXT,
+  period_start TEXT,
+  period_end TEXT,
+  impressions INTEGER,
+  reach INTEGER,
+  engagements INTEGER,
+  likes INTEGER,
+  comments INTEGER,
+  shares INTEGER,
+  saves INTEGER,
+  clicks INTEGER,
+  video_views INTEGER,
+  watch_time_sec INTEGER,
+  profile_visits INTEGER,
+  website_clicks INTEGER,
+  followers_gained INTEGER,
+  recorded_at TEXT NOT NULL,
+  synced_at TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (post_id) REFERENCES marketing_social_posts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS marketing_social_media_assets (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  asset_type TEXT NOT NULL,
+  storage_url TEXT,
+  mime_type TEXT,
+  byte_size INTEGER,
+  width INTEGER,
+  height INTEGER,
+  duration_sec INTEGER,
+  tags TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_social_attribution_links (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT,
+  post_id TEXT,
+  label TEXT NOT NULL,
+  destination_url TEXT NOT NULL,
+  utm_source TEXT NOT NULL,
+  utm_medium TEXT NOT NULL,
+  utm_campaign TEXT NOT NULL,
+  utm_content TEXT,
+  utm_term TEXT,
+  tracked_url TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_social_audit_events (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL
+);
 `;
 
 export function newId(): string {
@@ -116,6 +217,13 @@ export async function withMarketingPgClient<T>(
     return await fn(query);
   } finally {
     await client.end();
+  }
+}
+
+export function closeMarketingSqliteForTests(): void {
+  if (sqliteInstance) {
+    sqliteInstance.close();
+    sqliteInstance = null;
   }
 }
 

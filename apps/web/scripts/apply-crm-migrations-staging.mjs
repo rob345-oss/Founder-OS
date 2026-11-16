@@ -17,6 +17,8 @@ const migrations = [
   "000007_marketing_security.sql",
   "000008_crm_email_campaigns.sql",
   "000009_crm_email_security.sql",
+  "000010_social_command_center.sql",
+  "000011_social_command_center_security.sql",
 ];
 
 const url = process.env.CRM_DATABASE_URL ?? process.env.DATABASE_URL;

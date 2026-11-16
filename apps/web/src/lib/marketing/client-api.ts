@@ -6,6 +6,7 @@ import type {
   MarketingOverviewResponse,
   MarketingSettings,
 } from "./types";
+import type { SocialAccount, SocialOverviewResponse, SocialPostWithMetrics } from "./social-types";
 
 function headers(token: string | null): HeadersInit {
   const h: HeadersInit = { Accept: "application/json" };
@@ -108,5 +109,94 @@ export type MarketingSettingsPayload = MarketingSettings & {
 
 export async function fetchMarketingSettings(token: string | null): Promise<MarketingSettingsPayload> {
   const res = await fetch("/api/marketing/settings", { headers: headers(token), cache: "no-store" });
+  return parseJson(res);
+}
+
+export async function fetchSocialOverview(
+  token: string | null,
+  query: { preset?: string; start?: string; end?: string; platform?: string },
+): Promise<SocialOverviewResponse> {
+  const params = new URLSearchParams();
+  if (query.preset) params.set("preset", query.preset);
+  if (query.start) params.set("start", query.start);
+  if (query.end) params.set("end", query.end);
+  if (query.platform) params.set("platform", query.platform);
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/marketing/social/overview${q}`, { headers: headers(token), cache: "no-store" });
+  return parseJson(res);
+}
+
+export async function fetchSocialPosts(
+  token: string | null,
+  query: { q?: string; status?: string; platform?: string } = {},
+): Promise<SocialPostWithMetrics[]> {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.status) params.set("status", query.status);
+  if (query.platform) params.set("platform", query.platform);
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/marketing/social/posts${q}`, { headers: headers(token), cache: "no-store" });
+  const body = await parseJson<{ items: SocialPostWithMetrics[] }>(res);
+  return body.items;
+}
+
+export async function fetchSocialPost(token: string | null, id: string): Promise<SocialPostWithMetrics> {
+  const res = await fetch(`/api/marketing/social/posts/${id}`, { headers: headers(token), cache: "no-store" });
+  return parseJson(res);
+}
+
+export async function createSocialPost(
+  token: string | null,
+  body: Record<string, unknown>,
+): Promise<SocialPostWithMetrics> {
+  const res = await fetch("/api/marketing/social/posts", {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson(res);
+}
+
+export async function updateSocialPostApi(
+  token: string | null,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<SocialPostWithMetrics> {
+  const res = await fetch(`/api/marketing/social/posts/${id}`, {
+    method: "PATCH",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson(res);
+}
+
+export async function recordSocialPostMetrics(
+  token: string | null,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const res = await fetch(`/api/marketing/social/posts/${id}/metrics`, {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson(res);
+}
+
+export async function fetchSocialAccounts(token: string | null): Promise<SocialAccount[]> {
+  const res = await fetch("/api/marketing/social/accounts", { headers: headers(token), cache: "no-store" });
+  const body = await parseJson<{ items: SocialAccount[] }>(res);
+  return body.items;
+}
+
+export async function buildSocialTrackedLink(
+  token: string | null,
+  body: Record<string, unknown>,
+): Promise<{ id: string; trackedUrl: string; label: string }> {
+  const res = await fetch("/api/marketing/social/links", {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   return parseJson(res);
 }

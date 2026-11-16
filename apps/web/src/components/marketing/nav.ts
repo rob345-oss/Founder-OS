@@ -1,19 +1,17 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
   BarChart3,
   Calendar,
-  Flag,
+  Image,
   LayoutDashboard,
-  LineChart,
+  Lightbulb,
+  Link2,
   Megaphone,
   PenLine,
-  PieChart,
   Plug,
+  Rows3,
   Settings,
-  Share2,
-  Target,
-  TrendingUp,
+  Sparkles,
   Users,
 } from "lucide-react";
 
@@ -22,42 +20,29 @@ export type MarketingNavSection = {
   items: { href: string; label: string; icon: LucideIcon; exact?: boolean }[];
 };
 
+/** Social publishing command center + shared marketing modules. */
 export const MARKETING_NAV: MarketingNavSection[] = [
   {
-    title: "Overview",
+    title: "Social command center",
     items: [
-      { href: "/marketing", label: "Dashboard", icon: LayoutDashboard, exact: true },
-      { href: "/marketing/analytics", label: "Analytics", icon: BarChart3 },
-    ],
-  },
-  {
-    title: "Social & content",
-    items: [
-      { href: "/marketing/social", label: "Social Intelligence", icon: Share2 },
-      { href: "/marketing/content", label: "Content Studio", icon: PenLine },
-      { href: "/marketing/calendar", label: "Content Calendar", icon: Calendar },
-    ],
-  },
-  {
-    title: "Growth",
-    items: [
-      { href: "/marketing/growth", label: "Growth & Conversions", icon: TrendingUp },
+      { href: "/marketing/social", label: "Overview", icon: LayoutDashboard, exact: true },
+      { href: "/marketing/social/calendar", label: "Content calendar", icon: Calendar },
+      { href: "/marketing/social/posts", label: "All posts", icon: Rows3 },
+      { href: "/marketing/social/create", label: "Create post", icon: PenLine },
+      { href: "/marketing/social/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/marketing/campaigns", label: "Campaigns", icon: Megaphone },
-      { href: "/marketing/audience", label: "Audience Insights", icon: Users },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      { href: "/marketing/activity", label: "Marketing Activity", icon: Activity },
-      { href: "/marketing/goals", label: "Goals & Targets", icon: Flag },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { href: "/marketing/integrations", label: "Integrations", icon: Plug },
+      { href: "/marketing/audience", label: "Audience", icon: Users },
+      { href: "/marketing/social/insights", label: "AI insights", icon: Lightbulb },
+      { href: "/marketing/social/media", label: "Media library", icon: Image },
+      { href: "/marketing/integrations", label: "Connected accounts", icon: Plug },
       { href: "/marketing/settings", label: "Settings", icon: Settings },
+    ],
+  },
+  {
+    title: "Executive marketing",
+    items: [
+      { href: "/marketing", label: "Growth dashboard", icon: Sparkles, exact: true },
+      { href: "/marketing/growth", label: "Conversions", icon: Link2 },
     ],
   },
 ];
