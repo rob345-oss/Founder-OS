@@ -4,8 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
+  SocialPostMediaField,
+  postMediaRefs,
+  type PostMediaSlot,
+} from "@/components/marketing/social/media/SocialPostMediaField";
+import {
   deleteSocialPostApi,
   duplicateSocialPostApi,
+  fetchSocialMediaAssets,
   updateSocialPostApi,
 } from "@/lib/marketing/client-api";
 import { DEFAULT_SOCIAL_CALENDAR_TZ, utcToZonedLocalFields } from "@/lib/marketing/social-calendar";
@@ -40,13 +46,30 @@ export function CalendarInspector({
   const [campaignId, setCampaignId] = useState(post.campaignId ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [media, setMedia] = useState<PostMediaSlot[]>([]);
 
   useEffect(() => {
     setLabel(post.internalLabel ?? "");
     setBody(post.bodyText);
     setCampaignId(post.campaignId ?? "");
     setMessage(null);
-  }, [post]);
+    void (async () => {
+      if (!token || !post.mediaRefs.length) {
+        setMedia([]);
+        return;
+      }
+      const assets = await fetchSocialMediaAssets(token, { ids: post.mediaRefs });
+      const map = new Map(assets.map((a) => [a.id, a]));
+      setMedia(
+        post.mediaRefs.map((id, order) => ({
+          assetId: id,
+          altText: map.get(id)?.altText ?? "",
+          asset: map.get(id),
+          order,
+        })),
+      );
+    })();
+  }, [post, token]);
 
   const zoned = post.scheduledAt ? utcToZonedLocalFields(post.scheduledAt, timeZone) : null;
 
@@ -55,10 +78,12 @@ export function CalendarInspector({
     setBusy(true);
     setMessage(null);
     try {
+      if (media.some((m) => m.uploading)) throw new Error("Wait for media uploads to finish.");
       const updated = await updateSocialPostApi(token, post.id, {
         internalLabel: label || null,
         bodyText: body,
         campaignId: campaignId || null,
+        mediaRefs: postMediaRefs(media),
         expectedUpdatedAt: post.updatedAt,
       });
       onUpdated(updated);
@@ -173,6 +198,27 @@ export function CalendarInspector({
             className="mt-1 w-full rounded-lg border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm leading-relaxed text-[var(--studio-text-primary)]"
           />
         </label>
+        <SocialPostMediaField
+          token={token}
+          platform={post.platform}
+          value={media}
+          onChange={(next) => {
+            setMedia(next);
+            void (async () => {
+              if (!token || next.some((m) => m.uploading)) return;
+              try {
+                const updated = await updateSocialPostApi(token, post.id, {
+                  mediaRefs: postMediaRefs(next),
+                  expectedUpdatedAt: post.updatedAt,
+                });
+                onUpdated(updated);
+              } catch (e) {
+                setMessage(e instanceof Error ? e.message : "Media save failed");
+              }
+            })();
+          }}
+          disabled={busy}
+        />
         <label className="block text-xs text-[var(--studio-text-tertiary)]">
           Campaign
           <select

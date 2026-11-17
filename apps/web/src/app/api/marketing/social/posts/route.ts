@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireMarketingSuperAdmin } from "@/lib/marketing/guard";
+import { assertPostMediaReady } from "@/lib/marketing/server/social-post-media-guard";
 import { createSocialPost, listSocialPosts } from "@/lib/marketing/server/social-repository";
 import type { SocialPlatformId, SocialPostStatus } from "@/lib/marketing/social-types";
 import { SOCIAL_PLATFORMS, SOCIAL_POST_STATUSES } from "@/lib/marketing/social-types";
@@ -49,12 +50,16 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "platform is required" }, { status: 400 });
   }
   try {
+    const platform = body.platform as SocialPlatformId;
+    const status = typeof body.status === "string" ? (body.status as SocialPostStatus) : undefined;
+    const mediaRefs = Array.isArray(body.mediaRefs) ? body.mediaRefs.map(String) : undefined;
+    await assertPostMediaReady(platform, status, mediaRefs);
     const created = await createSocialPost({
-      platform: body.platform as SocialPlatformId,
+      platform,
       bodyText: typeof body.bodyText === "string" ? body.bodyText : "",
       internalLabel: typeof body.internalLabel === "string" ? body.internalLabel : null,
       campaignId: typeof body.campaignId === "string" ? body.campaignId : null,
-      status: typeof body.status === "string" ? (body.status as SocialPostStatus) : undefined,
+      status,
       scheduledAt: typeof body.scheduledAt === "string" ? body.scheduledAt : null,
       publishedAt: typeof body.publishedAt === "string" ? body.publishedAt : null,
       platformPermalink: typeof body.platformPermalink === "string" ? body.platformPermalink : null,
@@ -62,6 +67,7 @@ export async function POST(req: NextRequest) {
       ctaText: typeof body.ctaText === "string" ? body.ctaText : null,
       hashtags: typeof body.hashtags === "string" ? body.hashtags : null,
       topicTags: Array.isArray(body.topicTags) ? body.topicTags.map(String) : undefined,
+      mediaRefs,
       isManualTrackOnly: Boolean(body.isManualTrackOnly),
     });
     return Response.json(created, { status: 201 });

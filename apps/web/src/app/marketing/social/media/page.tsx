@@ -1,19 +1,19 @@
 "use client";
 
-import { MarketingEmptyState } from "@/components/marketing/MarketingEmptyState";
 import { MarketingModuleScaffold } from "@/components/marketing/MarketingModuleScaffold";
+import { SocialMediaLibraryWorkspace } from "@/components/marketing/social/media/SocialMediaLibraryWorkspace";
+import { useMarketingSession } from "@/components/marketing/useMarketingSession";
 
 export default function SocialMediaLibraryPage() {
+  const { token } = useMarketingSession();
+
   return (
     <MarketingModuleScaffold
       eyebrow="Social command center"
       title="Media library"
-      description="Centralized creative assets with Studio cross-links. Upload pipeline and Blob storage land in M2."
+      description="Upload, organize, and reuse creative assets across social posts."
     >
-      <MarketingEmptyState
-        title="No media assets yet"
-        description="Attach media references when creating posts. Full library management connects to Studio exports next."
-      />
+      <SocialMediaLibraryWorkspace token={token} />
     </MarketingModuleScaffold>
   );
 }
