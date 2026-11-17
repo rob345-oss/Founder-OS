@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 
 import { getCrmConfig } from "@/lib/crm/config";
 import { ensureCrmDataDir } from "@/lib/crm/server/data-dir";
+import { buildPgClientConnectionConfig } from "@/lib/crm/server/pg-connection";
 
 import { getMarketingConfig } from "../config";
 
@@ -196,17 +197,14 @@ export function getMarketingSqlite(): Database.Database {
   return db;
 }
 
-function toPgUrl(raw: string): string {
-  return raw.replace(/^postgresql\+asyncpg:/, "postgresql:").replace(/^postgres\+asyncpg:/, "postgres:");
-}
-
 export async function withMarketingPgClient<T>(
   fn: (query: (sql: string, params?: unknown[]) => Promise<unknown[]>) => Promise<T>,
 ): Promise<T> {
   const url = getMarketingConfig().databaseUrl ?? getCrmConfig().databaseUrl;
   if (!url) throw new Error("MARKETING_DATABASE_URL / CRM_DATABASE_URL not configured");
   const { Client } = await import("pg");
-  const client = new Client({ connectionString: toPgUrl(url), connectionTimeoutMillis: 8_000 });
+  const { connectionString, ssl } = buildPgClientConnectionConfig(url);
+  const client = new Client({ connectionString, ssl, connectionTimeoutMillis: 8_000 });
   await client.connect();
   try {
     await client.query("SET search_path TO founder_os, public");
