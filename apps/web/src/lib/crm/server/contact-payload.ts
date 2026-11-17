@@ -2,7 +2,7 @@ import {
   contactToProfile,
   lifecycleToPipeline,
   parseContactProfile,
-  relationshipCategoryToClassifications,
+  relationshipCategoriesToClassifications,
   resolveScalarsFromProfile,
   sanitizeProfileForStorage,
   validateContactProfile,
@@ -38,7 +38,7 @@ export function parseContactWriteBody(
       contactSource: scalars.contactSource ?? existing?.contactSource ?? "manual",
       classifications:
         payload.classifications ??
-        relationshipCategoryToClassifications(profile.crm.relationshipCategory),
+        relationshipCategoriesToClassifications(profile.crm.relationshipCategories),
       relationshipStatus: payload.relationshipStatus ?? existing?.relationshipStatus ?? "new",
       pipelineStage: payload.pipelineStage ?? lifecycleToPipeline(profile.crm.lifecycleStage),
       tags: payload.tags ?? existing?.tags,

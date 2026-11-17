@@ -1,4 +1,5 @@
 import { contactToProfile, type CrmContactProfile } from "@/lib/crm/contact-profile";
+import { phoneDigitsForTel } from "@/lib/crm/contact-phone";
 import type { CrmContact } from "@/lib/crm/types";
 
 export type ContactQuickAction = {
@@ -10,7 +11,7 @@ export type ContactQuickAction = {
 function digitsPhone(profile: CrmContactProfile): string | null {
   const primary = profile.phones.find((p) => p.isPrimary && p.number.trim()) ?? profile.phones.find((p) => p.number.trim());
   if (!primary) return null;
-  return `${primary.countryCallingCode}${primary.number}`.replace(/[^\d+]/g, "");
+  return phoneDigitsForTel(primary.e164, primary.countryCallingCode, primary.number);
 }
 
 export function buildContactQuickActions(contact: CrmContact): ContactQuickAction[] {
@@ -24,7 +25,7 @@ export function buildContactQuickActions(contact: CrmContact): ContactQuickActio
   if (phone) {
     actions.push({ key: "call", label: "Call", href: `tel:${phone}` });
     actions.push({ key: "sms", label: "SMS", href: `sms:${phone}` });
-    if (profile.phones.some((p) => p.label === "whatsapp")) {
+    if (profile.phones.some((p) => p.label === "whatsapp" || p.whatsAppAvailable)) {
       actions.push({ key: "whatsapp", label: "WhatsApp", href: `https://wa.me/${phone.replace(/^\+/, "")}` });
     }
   }

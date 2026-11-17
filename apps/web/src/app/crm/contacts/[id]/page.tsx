@@ -6,14 +6,15 @@ import { useParams } from "next/navigation";
 import { ContactEditorModal } from "@/components/crm/contacts/ContactEditorModal";
 import { ContactInfoOverview } from "@/components/crm/contacts/ContactInfoOverview";
 import { ContactProfileHeader } from "@/components/crm/contacts/ContactProfileHeader";
-import { crmBtnPrimarySm } from "@/components/crm/crmUi";
 import { useCrmSession } from "@/components/crm/useCrmSession";
-import { addCrmNote, fetchCrmContact } from "@/lib/crm/client-api";
+import { ContactNotesPanel } from "@/components/crm/contacts/ContactNotesPanel";
+import { fetchCrmContact } from "@/lib/crm/client-api";
 import { fetchContactEmailActivity } from "@/lib/crm/email-client-api";
 import type { CrmEmailActivityItem } from "@/lib/crm/email/types";
+import { contactToProfile } from "@/lib/crm/contact-profile";
 import type { CrmActivity, CrmContact, CrmEmailMessage, CrmFollowUp, CrmNote } from "@/lib/crm/types";
 
-type TabKey = "overview" | "contact" | "notes" | "emails" | "timeline" | "followups" | "waitlist";
+type TabKey = "overview" | "contact" | "social" | "notes" | "emails" | "timeline" | "followups" | "relationships" | "waitlist";
 
 export default function CrmContactProfilePage() {
   const params = useParams<{ id: string }>();
@@ -24,7 +25,6 @@ export default function CrmContactProfilePage() {
   const [emails, setEmails] = useState<CrmEmailMessage[]>([]);
   const [followUps, setFollowUps] = useState<CrmFollowUp[]>([]);
   const [campaignEmails, setCampaignEmails] = useState<CrmEmailActivityItem[]>([]);
-  const [noteBody, setNoteBody] = useState("");
   const [tab, setTab] = useState<TabKey>("overview");
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -43,13 +43,6 @@ export default function CrmContactProfilePage() {
     void load();
   }, [load]);
 
-  async function onAddNote(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token || !params.id || !noteBody.trim()) return;
-    await addCrmNote(token, params.id, noteBody);
-    setNoteBody("");
-    await load();
-  }
 
   if (!contact) {
     return <div className="p-10 text-sm text-[var(--studio-text-secondary)]">Loading profile…</div>;
@@ -76,8 +69,10 @@ export default function CrmContactProfilePage() {
           [
             ["overview", "Overview"],
             ["contact", "Contact information"],
+            ["social", "Social profiles"],
             ["notes", "Notes"],
             ["emails", "Email activity"],
+            ["relationships", "Relationships"],
             ["timeline", "Activity"],
             ["followups", "Follow-ups"],
             ["waitlist", "Waitlist"],
@@ -113,34 +108,44 @@ export default function CrmContactProfilePage() {
 
         {tab === "contact" && <ContactInfoOverview contact={contact} />}
 
-        {tab === "notes" && (
-          <div className="space-y-4">
-            <p className="text-xs text-[var(--studio-text-tertiary)]">Notes are private CRM information.</p>
-            <form onSubmit={(e) => void onAddNote(e)} className="space-y-2">
-              <textarea
-                value={noteBody}
-                onChange={(e) => setNoteBody(e.target.value)}
-                rows={4}
-                placeholder="Internal note…"
-                className="w-full rounded-xl border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2 text-sm"
-              />
-              <button type="submit" className={crmBtnPrimarySm}>
-                Add note
-              </button>
-            </form>
-            <ul className="space-y-3">
-              {notes.map((n) => (
-                <li key={n.id} className="rounded-xl border border-[var(--studio-border)] bg-[var(--studio-bg-1)] p-4 text-sm">
-                  <p className="whitespace-pre-wrap text-[var(--studio-text-primary)]">{n.body}</p>
-                  <p className="mt-2 text-[11px] text-[var(--studio-text-tertiary)]">
-                    {new Date(n.createdAt).toLocaleString()}
-                    {n.updatedAt !== n.createdAt ? ` · edited ${new Date(n.updatedAt).toLocaleString()}` : ""}
-                  </p>
+        {tab === "social" && (() => {
+          const profile = contactToProfile(contact);
+          return (
+            <ul className="space-y-2 text-sm">
+              {profile.socialLinks.filter((s) => s.url.trim()).map((s) => (
+                <li key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--studio-border)] p-3">
+                  <span className="font-medium capitalize">{s.platform.replaceAll("_", " ")}</span>
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[var(--studio-accent)] hover:underline">
+                    {s.handle || s.url}
+                  </a>
+                  <span className="text-xs text-[var(--studio-text-tertiary)]">Open profile</span>
                 </li>
               ))}
+              {profile.socialLinks.every((s) => !s.url.trim()) && (
+                <p className="text-[var(--studio-text-tertiary)]">No social profiles yet.</p>
+              )}
             </ul>
-          </div>
+          );
+        })()}
+
+        {tab === "notes" && (
+          <ContactNotesPanel contactId={contact.id} token={token} notes={notes} onChange={load} />
         )}
+
+        {tab === "relationships" && (() => {
+          const profile = contactToProfile(contact);
+          return (
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <Field label="Strength" value={profile.relationship.strength || "—"} />
+              <Field label="Introduced by" value={profile.relationship.introducedBy || "—"} />
+              <Field label="Priority" value={profile.relationship.priority || "—"} />
+              <Field label="Owner" value={profile.relationship.relationshipOwner || "—"} />
+              <Field label="Campaign" value={profile.relationship.associatedCampaign || "—"} />
+              <Field label="How we met" value={profile.identity.howWeMet || "—"} />
+              <Field label="Referral source" value={profile.identity.referralSource || profile.crm.leadSource || "—"} />
+            </dl>
+          );
+        })()}
 
         {tab === "emails" && (
           <ul className="space-y-2 text-sm">

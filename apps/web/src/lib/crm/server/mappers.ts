@@ -95,6 +95,8 @@ export function mapNoteRow(row: ContactRow): CrmNote {
     contactId: String(row.contact_id),
     authorUserId: String(row.author_user_id),
     body: String(row.body),
+    category: (row.category ? String(row.category) : "general") as CrmNote["category"],
+    pinned: row.pinned === true || row.pinned === 1 || row.pinned === "1",
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

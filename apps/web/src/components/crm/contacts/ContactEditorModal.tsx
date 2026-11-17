@@ -24,7 +24,6 @@ import {
   CRM_COMM_TIMES,
   CRM_EMAIL_LABELS,
   CRM_LIFECYCLE_STAGES,
-  CRM_PHONE_LABELS,
   CRM_RELATIONSHIP_CATEGORIES,
   CRM_SOCIAL_PLATFORMS,
   composeFullName,
@@ -35,17 +34,31 @@ import {
   validateContactProfile,
   type CrmContactProfile,
 } from "@/lib/crm/contact-profile";
-import { createCrmContact, updateCrmContact } from "@/lib/crm/client-api";
-import { CRM_RELATIONSHIP_STATUSES, type CrmContact, type CrmRelationshipStatus } from "@/lib/crm/types";
+import { createCrmContact, fetchCrmContactDuplicates, updateCrmContact } from "@/lib/crm/client-api";
+import { normalizeSocialUrl } from "@/lib/crm/social-profiles";
+import { CRM_RELATIONSHIP_STATUSES, type CrmContact, type CrmContactDuplicateMatch, type CrmRelationshipStatus } from "@/lib/crm/types";
 
 import { ContactAvatar } from "./ContactAvatar";
+import { ContactPhoneFields } from "./ContactPhoneFields";
 
 const fieldClass =
   "w-full rounded-xl border border-[var(--studio-border)] bg-[var(--studio-bg-1)] px-3 py-2.5 text-sm text-[var(--studio-text-primary)] transition-[border-color,box-shadow] duration-200 placeholder:text-[var(--studio-text-tertiary)] focus:border-[var(--studio-accent)]";
 
 const labelClass = "mb-1 block text-xs font-medium text-[var(--studio-text-secondary)]";
 
-type SectionKey = "methods" | "social" | "addresses" | "communication" | "crm" | "notes";
+type SectionIcon = React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
+
+type SectionKey =
+  | "methods"
+  | "social"
+  | "addresses"
+  | "communication"
+  | "professional"
+  | "relationship"
+  | "crm"
+  | "notes";
+
+const DRAFT_KEY = "founder_os_crm_contact_draft_v2";
 
 const COMMON_TIMEZONES = [
   "America/New_York",
@@ -85,9 +98,12 @@ export function ContactEditorModal({
     social: false,
     addresses: false,
     communication: false,
+    professional: false,
+    relationship: false,
     crm: false,
     notes: false,
   });
+  const [duplicates, setDuplicates] = useState<CrmContactDuplicateMatch[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -108,17 +124,71 @@ export function ContactEditorModal({
     setFieldErrors({});
     setFormError(null);
     setDirty(false);
-    setExpanded({ methods: false, social: false, addresses: false, communication: false, crm: false, notes: false });
+    setExpanded({
+      methods: false,
+      social: false,
+      addresses: false,
+      communication: false,
+      professional: false,
+      relationship: false,
+      crm: false,
+      notes: false,
+    });
+    setDuplicates([]);
   }, []);
 
   useEffect(() => {
     if (open) {
-      resetFromContact(mode === "edit" ? contact : null);
+      if (mode === "create") {
+        try {
+          const raw = localStorage.getItem(DRAFT_KEY);
+          if (raw) {
+            const draft = JSON.parse(raw) as { profile: CrmContactProfile; tagsText?: string };
+            setProfile(draft.profile);
+            setTagsText(draft.tagsText ?? "");
+            setDirty(true);
+          } else {
+            resetFromContact(null);
+          }
+        } catch {
+          resetFromContact(null);
+        }
+      } else {
+        resetFromContact(contact);
+      }
       const t = window.setTimeout(() => firstFieldRef.current?.focus(), 120);
       return () => window.clearTimeout(t);
     }
     return undefined;
   }, [open, mode, contact, resetFromContact]);
+
+  useEffect(() => {
+    if (!open || mode !== "create" || !dirty) return;
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ profile, tagsText }));
+      } catch {
+        /* quota */
+      }
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [open, mode, dirty, profile, tagsText]);
+
+  useEffect(() => {
+    if (!open || !token) return;
+    const primaryEmail = profile.emails.find((e) => e.isPrimary && e.address.trim())?.address;
+    const primaryPhone = profile.phones.find((p) => p.isPrimary && p.number.trim());
+    const t = window.setTimeout(() => {
+      void fetchCrmContactDuplicates(token, {
+        email: primaryEmail,
+        phoneE164: primaryPhone?.e164 ?? undefined,
+        excludeId: contact?.id,
+      })
+        .then(setDuplicates)
+        .catch(() => setDuplicates([]));
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [open, token, profile.emails, profile.phones, contact?.id]);
 
   const headerLine = useMemo(() => {
     const name = composeFullName(profile.identity);
@@ -153,7 +223,7 @@ export function ContactEditorModal({
     setFormError(null);
     try {
       const body = {
-        profile: { ...profile, version: 1 },
+        profile: { ...profile, version: 2 },
         tags: tagsText
           .split(",")
           .map((t) => t.trim())
@@ -166,6 +236,7 @@ export function ContactEditorModal({
           ? await updateCrmContact(token, contact.id, body)
           : await createCrmContact(token, body);
       setDirty(false);
+      if (mode === "create") localStorage.removeItem(DRAFT_KEY);
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -277,13 +348,102 @@ export function ContactEditorModal({
                     }}
                   />
                 </Field>
-                <Field label="Department" className="sm:col-span-2">
+                <Field label="Department">
                   <input
                     className={fieldClass}
                     value={profile.identity.department}
                     onChange={(e) => {
                       markDirty();
                       setProfile((p) => ({ ...p, identity: { ...p.identity, department: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Contact type">
+                  <select
+                    className={fieldClass}
+                    value={profile.identity.contactType}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({
+                        ...p,
+                        identity: { ...p.identity, contactType: e.target.value as CrmContactProfile["identity"]["contactType"] },
+                      }));
+                    }}
+                  >
+                    <option value="individual">Individual</option>
+                    <option value="organization">Organization</option>
+                  </select>
+                </Field>
+                <Field label="Name pronunciation">
+                  <input
+                    className={fieldClass}
+                    value={profile.identity.namePronunciation}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, namePronunciation: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Website" error={fieldErrors["identity.website"]}>
+                  <input
+                    className={fieldClass}
+                    value={profile.identity.website}
+                    placeholder="https://"
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, website: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Birthday">
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={profile.identity.birthday ?? ""}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, birthday: e.target.value || null } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Country / region">
+                  <input
+                    className={fieldClass}
+                    value={profile.identity.countryRegion}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, countryRegion: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="How we met" className="sm:col-span-2">
+                  <input
+                    className={fieldClass}
+                    value={profile.identity.howWeMet}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, howWeMet: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Referral source">
+                  <input
+                    className={fieldClass}
+                    value={profile.identity.referralSource}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, referralSource: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Date first contacted">
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={profile.identity.dateFirstContacted ?? ""}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, identity: { ...p.identity, dateFirstContacted: e.target.value || null } }));
                     }}
                   />
                 </Field>
@@ -328,7 +488,7 @@ export function ContactEditorModal({
               open={expanded.methods}
               onToggle={() => toggleSection("methods")}
             >
-              <PhoneRows
+              <ContactPhoneFields
                 phones={profile.phones}
                 errors={fieldErrors}
                 onChange={(phones) => {
@@ -498,6 +658,166 @@ export function ContactEditorModal({
                     Operational preference only — not marketing consent.
                   </p>
                 </Field>
+                <div className="sm:col-span-2 flex flex-wrap gap-4 pt-1">
+                  {(
+                    [
+                      ["doNotCall", "Do not call"],
+                      ["doNotEmail", "Do not email"],
+                      ["doNotSms", "Do not SMS"],
+                      ["doNotContact", "Do not contact"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-xs text-[var(--studio-text-secondary)]">
+                      <input
+                        type="checkbox"
+                        checked={profile.communication[key]}
+                        onChange={(e) => {
+                          markDirty();
+                          setProfile((p) => ({
+                            ...p,
+                            communication: { ...p.communication, [key]: e.target.checked },
+                          }));
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Professional & organization"
+              icon={GripVertical}
+              open={expanded.professional}
+              onToggle={() => toggleSection("professional")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ["industry", "Industry"],
+                    ["companySize", "Company size"],
+                    ["organizationWebsite", "Organization website"],
+                    ["roleInPurchasing", "Role in purchasing"],
+                    ["relationshipToTitaniumGuardian", "Relationship to Titanium Guardian"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Field key={key} label={label} className={key === "relationshipToTitaniumGuardian" ? "sm:col-span-2" : undefined}>
+                    <input
+                      className={fieldClass}
+                      value={profile.professional[key]}
+                      onChange={(e) => {
+                        markDirty();
+                        setProfile((p) => ({
+                          ...p,
+                          professional: { ...p.professional, [key]: e.target.value },
+                        }));
+                      }}
+                    />
+                  </Field>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Relationship intelligence"
+              icon={UserRound}
+              open={expanded.relationship}
+              onToggle={() => toggleSection("relationship")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Strength">
+                  <input
+                    className={fieldClass}
+                    value={profile.relationship.strength}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, relationship: { ...p.relationship, strength: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Introduced by">
+                  <input
+                    className={fieldClass}
+                    value={profile.relationship.introducedBy}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, relationship: { ...p.relationship, introducedBy: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="First interaction">
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={profile.relationship.firstInteractionDate ?? ""}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({
+                        ...p,
+                        relationship: { ...p.relationship, firstInteractionDate: e.target.value || null },
+                      }));
+                    }}
+                  />
+                </Field>
+                <Field label="Last interaction">
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={profile.relationship.mostRecentInteractionDate ?? ""}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({
+                        ...p,
+                        relationship: { ...p.relationship, mostRecentInteractionDate: e.target.value || null },
+                      }));
+                    }}
+                  />
+                </Field>
+                <Field label="Next follow-up">
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={profile.relationship.nextFollowUpDate ?? ""}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({
+                        ...p,
+                        relationship: { ...p.relationship, nextFollowUpDate: e.target.value || null },
+                      }));
+                    }}
+                  />
+                </Field>
+                <Field label="Relationship owner">
+                  <input
+                    className={fieldClass}
+                    value={profile.relationship.relationshipOwner}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, relationship: { ...p.relationship, relationshipOwner: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Priority">
+                  <input
+                    className={fieldClass}
+                    value={profile.relationship.priority}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, relationship: { ...p.relationship, priority: e.target.value } }));
+                    }}
+                  />
+                </Field>
+                <Field label="Associated campaign">
+                  <input
+                    className={fieldClass}
+                    value={profile.relationship.associatedCampaign}
+                    onChange={(e) => {
+                      markDirty();
+                      setProfile((p) => ({ ...p, relationship: { ...p.relationship, associatedCampaign: e.target.value } }));
+                    }}
+                  />
+                </Field>
               </div>
             </CollapsibleSection>
 
@@ -522,27 +842,38 @@ export function ContactEditorModal({
                     ))}
                   </select>
                 </Field>
-                <Field label="Relationship category">
-                  <select
-                    className={fieldClass}
-                    value={profile.crm.relationshipCategory}
-                    onChange={(e) => {
-                      markDirty();
-                      setProfile((p) => ({
-                        ...p,
-                        crm: {
-                          ...p.crm,
-                          relationshipCategory: e.target.value as CrmContactProfile["crm"]["relationshipCategory"],
-                        },
-                      }));
-                    }}
-                  >
-                    {CRM_RELATIONSHIP_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c.replaceAll("_", " ")}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Classifications" className="sm:col-span-2">
+                  <div className="flex flex-wrap gap-2">
+                    {CRM_RELATIONSHIP_CATEGORIES.map((c) => {
+                      const on = profile.crm.relationshipCategories.includes(c);
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          className={[
+                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                            on
+                              ? "border-[var(--studio-accent)] bg-[var(--studio-accent-muted)] text-[var(--studio-accent)]"
+                              : "border-[var(--studio-border)] text-[var(--studio-text-secondary)] hover:bg-[var(--studio-bg-hover)]",
+                          ].join(" ")}
+                          onClick={() => {
+                            markDirty();
+                            setProfile((p) => ({
+                              ...p,
+                              crm: {
+                                ...p.crm,
+                                relationshipCategories: on
+                                  ? p.crm.relationshipCategories.filter((x) => x !== c)
+                                  : [...p.crm.relationshipCategories, c],
+                              },
+                            }));
+                          }}
+                        >
+                          {c.replaceAll("_", " ")}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Field>
                 <Field label="Relationship status">
                   <select
@@ -583,6 +914,22 @@ export function ContactEditorModal({
                 </Field>
               </div>
             </CollapsibleSection>
+
+            {duplicates.length > 0 && (
+              <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-[var(--studio-text-primary)]">
+                <p className="font-medium">Possible duplicate{duplicates.length > 1 ? "s" : ""}</p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {duplicates.map((d) => (
+                    <li key={d.id}>
+                      <a href={`/crm/contacts/${d.id}`} className="text-[var(--studio-accent)] hover:underline">
+                        {d.fullName || d.primaryEmail}
+                      </a>
+                      {d.reason ? ` — ${d.reason}` : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {mode === "create" && (
               <CollapsibleSection title="Notes" icon={MessageSquare} open={expanded.notes} onToggle={() => toggleSection("notes")}>
@@ -628,7 +975,7 @@ function Section({
   children,
 }: {
   title: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: SectionIcon;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -657,7 +1004,7 @@ function CollapsibleSection({
   children,
 }: {
   title: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: SectionIcon;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -768,85 +1115,6 @@ function EmailRows({
   );
 }
 
-function PhoneRows({
-  phones,
-  errors,
-  onChange,
-}: {
-  phones: CrmContactProfile["phones"];
-  errors: Record<string, string>;
-  onChange: (phones: CrmContactProfile["phones"]) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      {phones.map((ph, idx) => (
-        <div key={ph.id} className="grid gap-2 rounded-xl border border-[var(--studio-border)]/80 p-3 sm:grid-cols-[auto_1fr_auto_auto_auto] sm:items-end">
-          <Field label="Code">
-            <input
-              className={`${fieldClass} max-w-[6rem]`}
-              value={ph.countryCallingCode}
-              onChange={(e) => onChange(phones.map((x) => (x.id === ph.id ? { ...x, countryCallingCode: e.target.value } : x)))}
-            />
-          </Field>
-          <Field label={idx === 0 ? "Phone number" : "Additional number"} error={idx === 0 ? errors.phones : undefined}>
-            <input
-              type="tel"
-              className={fieldClass}
-              value={ph.number}
-              onChange={(e) => onChange(phones.map((x) => (x.id === ph.id ? { ...x, number: e.target.value } : x)))}
-            />
-          </Field>
-          <Field label="Label">
-            <select
-              className={fieldClass}
-              value={ph.label}
-              onChange={(e) =>
-                onChange(phones.map((x) => (x.id === ph.id ? { ...x, label: e.target.value as typeof ph.label } : x)))
-              }
-            >
-              {CRM_PHONE_LABELS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <label className="flex items-center gap-2 pb-2 text-xs text-[var(--studio-text-secondary)]">
-            <input
-              type="radio"
-              name="primary-phone"
-              checked={ph.isPrimary}
-              onChange={() => onChange(phones.map((x) => ({ ...x, isPrimary: x.id === ph.id })))}
-            />
-            Primary
-          </label>
-          {phones.length > 1 ? (
-            <button
-              type="button"
-              className="mb-1 flex items-center justify-center rounded-lg p-2 text-[var(--studio-danger)] hover:bg-[var(--studio-bg-hover)]"
-              onClick={() => onChange(phones.filter((x) => x.id !== ph.id))}
-              aria-label="Remove phone"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          ) : (
-            <span />
-          )}
-        </div>
-      ))}
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 text-sm font-medium text-[var(--studio-accent)]"
-        onClick={() =>
-          onChange([...phones, { id: newContactMethodId(), number: "", countryCallingCode: "+1", label: "mobile", isPrimary: false }])
-        }
-      >
-        <Plus className="h-4 w-4" /> Add phone number
-      </button>
-    </div>
-  );
-}
-
 function SocialRows({
   links,
   errors,
@@ -859,7 +1127,7 @@ function SocialRows({
   return (
     <div className="space-y-3">
       {links.map((link) => (
-        <div key={link.id} className="grid gap-2 rounded-xl border border-[var(--studio-border)]/80 p-3 sm:grid-cols-[auto_1fr_auto] sm:items-end">
+        <div key={link.id} className="grid gap-2 rounded-xl border border-[var(--studio-border)]/80 p-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
           <Field label="Platform">
             <select
               className={fieldClass}
@@ -874,6 +1142,23 @@ function SocialRows({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Handle">
+            <input
+              className={fieldClass}
+              value={link.handle}
+              placeholder="@username"
+              onChange={(e) => onChange(links.map((x) => (x.id === link.id ? { ...x, handle: e.target.value } : x)))}
+              onBlur={() =>
+                onChange(
+                  links.map((x) =>
+                    x.id === link.id && !x.url.trim()
+                      ? { ...x, url: normalizeSocialUrl(x.platform, "", x.handle) }
+                      : x,
+                  ),
+                )
+              }
+            />
           </Field>
           <Field label="URL" error={errors[`social:${link.id}`]}>
             <input
@@ -896,7 +1181,12 @@ function SocialRows({
       <button
         type="button"
         className="inline-flex items-center gap-1 text-sm font-medium text-[var(--studio-accent)]"
-        onClick={() => onChange([...links, { id: newContactMethodId(), platform: "linkedin", url: "" }])}
+        onClick={() =>
+          onChange([
+            ...links,
+            { id: newContactMethodId(), platform: "linkedin", handle: "", url: "", notes: "", isPrimary: false },
+          ])
+        }
       >
         <Plus className="h-4 w-4" /> Add social link
       </button>
@@ -1001,6 +1291,7 @@ function AddressRows({
               region: "",
               postalCode: "",
               country: "",
+              isPrimary: false,
             },
           ])
         }

@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 
 import { normalizeEmail } from "../normalize";
+import type { CrmContactDuplicateMatch, CrmNoteCategory } from "../types";
 import type {
   CrmActivity,
   CrmClassification,
@@ -66,9 +67,11 @@ function sqliteListContacts(db: Database.Database, query: ContactListQuery): { i
   if (query.q?.trim()) {
     const like = `%${query.q.trim().toLowerCase()}%`;
     where.push(
-      "(LOWER(full_name) LIKE ? OR LOWER(primary_email) LIKE ? OR LOWER(COALESCE(phone,'')) LIKE ? OR LOWER(COALESCE(organization,'')) LIKE ?)",
+      `(LOWER(full_name) LIKE ? OR LOWER(primary_email) LIKE ? OR LOWER(COALESCE(phone,'')) LIKE ?
+        OR LOWER(COALESCE(organization,'')) LIKE ? OR LOWER(COALESCE(contact_preferences,'')) LIKE ?
+        OR LOWER(COALESCE(tags,'')) LIKE ?)`,
     );
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like, like);
   }
   if (query.classification) {
     where.push("classifications LIKE ?");
@@ -634,27 +637,35 @@ export async function archiveContact(id: string, actorUserId: string): Promise<b
 export async function listNotes(contactId: string): Promise<CrmNote[]> {
   if (getCrmDriver() === "postgres") {
     return withPgClient(async (q) => {
-      const rows = (await q("SELECT * FROM crm_notes WHERE contact_id = $1 ORDER BY created_at DESC", [contactId])) as Record<
-        string,
-        unknown
-      >[];
+      const rows = (await q(
+        "SELECT * FROM crm_notes WHERE contact_id = $1 ORDER BY pinned DESC, created_at DESC",
+        [contactId],
+      )) as Record<string, unknown>[];
       return rows.map(mapNoteRow);
     });
   }
   const rows = getCrmSqlite()
-    .prepare("SELECT * FROM crm_notes WHERE contact_id = ? ORDER BY created_at DESC")
+    .prepare("SELECT * FROM crm_notes WHERE contact_id = ? ORDER BY pinned DESC, created_at DESC")
     .all(contactId) as Record<string, unknown>[];
   return rows.map(mapNoteRow);
 }
 
-export async function addNote(contactId: string, authorUserId: string, body: string): Promise<CrmNote> {
+export async function addNote(
+  contactId: string,
+  authorUserId: string,
+  body: string,
+  opts?: { category?: CrmNoteCategory; pinned?: boolean },
+): Promise<CrmNote> {
   const ts = nowIso();
   const id = newId();
+  const category = opts?.category ?? "general";
+  const pinned = Boolean(opts?.pinned);
   if (getCrmDriver() === "postgres") {
     return withPgClient(async (q) => {
       await q(
-        "INSERT INTO crm_notes (id, contact_id, author_user_id, body, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6)",
-        [id, contactId, authorUserId, body.trim(), ts, ts],
+        `INSERT INTO crm_notes (id, contact_id, author_user_id, body, category, pinned, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [id, contactId, authorUserId, body.trim(), category, pinned, ts, ts],
       );
       await q(
         `INSERT INTO crm_activities (contact_id, event_type, source, payload, occurred_at) VALUES ($1, 'note_added', 'crm', $2::jsonb, $3)`,
@@ -666,11 +677,159 @@ export async function addNote(contactId: string, authorUserId: string, body: str
   }
   const db = getCrmSqlite();
   db.prepare(
-    "INSERT INTO crm_notes (id, contact_id, author_user_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(id, contactId, authorUserId, body.trim(), ts, ts);
+    "INSERT INTO crm_notes (id, contact_id, author_user_id, body, category, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, contactId, authorUserId, body.trim(), category, pinned ? 1 : 0, ts, ts);
   sqliteRecordActivity(db, contactId, "note_added", { noteId: id });
   const row = db.prepare("SELECT * FROM crm_notes WHERE id = ?").get(id) as Record<string, unknown>;
   return mapNoteRow(row);
+}
+
+export async function patchNote(
+  noteId: string,
+  editorUserId: string,
+  patch: { body?: string; category?: CrmNoteCategory; pinned?: boolean },
+): Promise<CrmNote | null> {
+  const ts = nowIso();
+  if (getCrmDriver() === "postgres") {
+    return withPgClient(async (q) => {
+      const prevRows = (await q("SELECT * FROM crm_notes WHERE id = $1", [noteId])) as Record<string, unknown>[];
+      if (!prevRows[0]) return null;
+      if (typeof patch.body === "string" && patch.body.trim() !== String(prevRows[0].body)) {
+        await q(
+          "INSERT INTO crm_note_revisions (note_id, editor_user_id, previous_body, revised_at) VALUES ($1,$2,$3,$4)",
+          [noteId, editorUserId, String(prevRows[0].body), ts],
+        );
+      }
+      await q(
+        `UPDATE crm_notes SET
+          body = COALESCE($2, body),
+          category = COALESCE($3, category),
+          pinned = COALESCE($4, pinned),
+          updated_at = $5
+        WHERE id = $1`,
+        [noteId, patch.body?.trim(), patch.category, patch.pinned, ts],
+      );
+      const rows = (await q("SELECT * FROM crm_notes WHERE id = $1", [noteId])) as Record<string, unknown>[];
+      return mapNoteRow(rows[0]);
+    });
+  }
+  const db = getCrmSqlite();
+  const prev = db.prepare("SELECT * FROM crm_notes WHERE id = ?").get(noteId) as Record<string, unknown> | undefined;
+  if (!prev) return null;
+  if (typeof patch.body === "string" && patch.body.trim() !== String(prev.body)) {
+    db.prepare(
+      "INSERT INTO crm_note_revisions (id, note_id, editor_user_id, previous_body, revised_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(newId(), noteId, editorUserId, String(prev.body), ts);
+  }
+  db.prepare(
+    `UPDATE crm_notes SET
+      body = COALESCE(?, body),
+      category = COALESCE(?, category),
+      pinned = COALESCE(?, pinned),
+      updated_at = ?
+    WHERE id = ?`,
+  ).run(
+    patch.body?.trim(),
+    patch.category,
+    patch.pinned === undefined ? null : patch.pinned ? 1 : 0,
+    ts,
+    noteId,
+  );
+  const row = db.prepare("SELECT * FROM crm_notes WHERE id = ?").get(noteId) as Record<string, unknown>;
+  return mapNoteRow(row);
+}
+
+export async function deleteNote(noteId: string, editorUserId: string): Promise<boolean> {
+  if (getCrmDriver() === "postgres") {
+    return withPgClient(async (q) => {
+      const rows = (await q("DELETE FROM crm_notes WHERE id = $1 RETURNING id", [noteId])) as { id: string }[];
+      return Boolean(rows[0]);
+    });
+  }
+  const db = getCrmSqlite();
+  const res = db.prepare("DELETE FROM crm_notes WHERE id = ?").run(noteId);
+  if (res.changes === 0) return false;
+  void editorUserId;
+  return true;
+}
+
+export async function findContactDuplicates(input: {
+  email?: string;
+  phoneE164?: string;
+  excludeId?: string;
+}): Promise<CrmContactDuplicateMatch[]> {
+  const emailNorm = input.email?.trim() ? normalizeEmail(input.email) : null;
+  const phoneDigits = input.phoneE164?.replace(/;ext=.*/i, "").replace(/[^\d+]/g, "") ?? null;
+  if (!emailNorm && !phoneDigits) return [];
+
+  if (getCrmDriver() === "postgres") {
+    return withPgClient(async (q) => {
+      const matches: CrmContactDuplicateMatch[] = [];
+      if (emailNorm) {
+        const rows = (await q(
+          `SELECT id, full_name, primary_email FROM crm_contacts
+           WHERE archived_at IS NULL AND primary_email_normalized = $1
+           AND ($2::uuid IS NULL OR id <> $2) LIMIT 5`,
+          [emailNorm, input.excludeId ?? null],
+        )) as { id: string; full_name: string; primary_email: string }[];
+        for (const r of rows) {
+          matches.push({ id: r.id, fullName: r.full_name, primaryEmail: r.primary_email, reason: "Same email" });
+        }
+      }
+      if (phoneDigits) {
+        const rows = (await q(
+          `SELECT id, full_name, primary_email FROM crm_contacts
+           WHERE archived_at IS NULL AND regexp_replace(COALESCE(phone,''), '[^0-9+]', '', 'g') = $1
+           AND ($2::uuid IS NULL OR id <> $2) LIMIT 5`,
+          [phoneDigits, input.excludeId ?? null],
+        )) as { id: string; full_name: string; primary_email: string }[];
+        for (const r of rows) {
+          if (!matches.some((m) => m.id === r.id)) {
+            matches.push({ id: r.id, fullName: r.full_name, primaryEmail: r.primary_email, reason: "Same phone" });
+          }
+        }
+      }
+      return matches;
+    });
+  }
+
+  const db = getCrmSqlite();
+  const matches: CrmContactDuplicateMatch[] = [];
+  if (emailNorm) {
+    const rows = db
+      .prepare(
+        `SELECT id, full_name, primary_email FROM crm_contacts
+         WHERE archived_at IS NULL AND primary_email_normalized = ?
+         AND (? IS NULL OR id <> ?) LIMIT 5`,
+      )
+      .all(emailNorm, input.excludeId ?? null, input.excludeId ?? null) as {
+      id: string;
+      full_name: string;
+      primary_email: string;
+    }[];
+    for (const r of rows) {
+      matches.push({ id: r.id, fullName: r.full_name, primaryEmail: r.primary_email, reason: "Same email" });
+    }
+  }
+  if (phoneDigits) {
+    const rows = db
+      .prepare(
+        `SELECT id, full_name, primary_email FROM crm_contacts
+         WHERE archived_at IS NULL AND replace(replace(replace(COALESCE(phone,''), ' ', ''), '-', ''), '+', '+') LIKE ?
+         AND (? IS NULL OR id <> ?) LIMIT 5`,
+      )
+      .all(`%${phoneDigits.replace(/^\+/, "")}%`, input.excludeId ?? null, input.excludeId ?? null) as {
+      id: string;
+      full_name: string;
+      primary_email: string;
+    }[];
+    for (const r of rows) {
+      if (!matches.some((m) => m.id === r.id)) {
+        matches.push({ id: r.id, fullName: r.full_name, primaryEmail: r.primary_email, reason: "Same phone" });
+      }
+    }
+  }
+  return matches;
 }
 
 export async function updateNote(noteId: string, editorUserId: string, body: string): Promise<CrmNote | null> {

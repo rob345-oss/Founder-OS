@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { UserPlus } from "lucide-react";
 
@@ -11,6 +12,7 @@ import { fetchCrmContacts } from "@/lib/crm/client-api";
 import type { CrmContact, CrmContactListItem } from "@/lib/crm/types";
 
 export default function CrmContactsPage() {
+  const router = useRouter();
   const { token } = useCrmSession();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<CrmContactListItem[]>([]);
@@ -34,8 +36,8 @@ export default function CrmContactsPage() {
     void load();
   }, [load]);
 
-  function onCreated(_contact: CrmContact) {
-    void load();
+  function onCreated(contact: CrmContact) {
+    router.push(`/crm/contacts/${contact.id}`);
   }
 
   return (

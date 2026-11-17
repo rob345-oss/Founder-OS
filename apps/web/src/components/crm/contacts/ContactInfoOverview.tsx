@@ -40,10 +40,14 @@ export function ContactInfoOverview({ contact }: { contact: CrmContact }) {
               .filter((p) => p.number.trim())
               .map((p) => (
                 <li key={p.id}>
-                  {p.countryCallingCode} {p.number}
+                  <a className="text-[var(--studio-accent)] hover:underline" href={`tel:${(p.e164 ?? `${p.countryCallingCode}${p.number}`).replace(/;ext=.*/, "")}`}>
+                    {p.countryCallingCode} {p.number}
+                    {p.extension ? ` ext. ${p.extension}` : ""}
+                  </a>
                   <span className="ml-2 text-xs text-[var(--studio-text-tertiary)]">
                     {p.label}
                     {p.isPrimary ? " · primary" : ""}
+                    {p.whatsAppAvailable ? " · WhatsApp" : ""}
                   </span>
                 </li>
               ))}

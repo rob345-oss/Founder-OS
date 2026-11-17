@@ -49,6 +49,6 @@ describe("contact profile", () => {
 
   it("round-trips profile storage", () => {
     const raw = sanitizeProfileForStorage(emptyContactProfile());
-    expect(parseContactProfile(raw).version).toBe(1);
+    expect(parseContactProfile(raw).version).toBe(2);
   });
 });

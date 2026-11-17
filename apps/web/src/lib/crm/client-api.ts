@@ -1,11 +1,13 @@
 import type {
+  CrmActivity,
   CrmContact,
+  CrmContactDuplicateMatch,
   CrmContactListItem,
   CrmDashboardMetrics,
   CrmEmailMessage,
   CrmFollowUp,
   CrmNote,
-  CrmActivity,
+  CrmNoteCategory,
   CrmPipelineStage,
 } from "./types";
 
@@ -95,13 +97,59 @@ export async function updateCrmContact(
   return parseJson(res);
 }
 
-export async function addCrmNote(token: string | null, contactId: string, body: string): Promise<CrmNote> {
+export async function fetchCrmContactDuplicates(
+  token: string | null,
+  query: { email?: string; phoneE164?: string; excludeId?: string },
+): Promise<CrmContactDuplicateMatch[]> {
+  const params = new URLSearchParams();
+  if (query.email) params.set("email", query.email);
+  if (query.phoneE164) params.set("phoneE164", query.phoneE164);
+  if (query.excludeId) params.set("excludeId", query.excludeId);
+  const res = await fetch(`/api/crm/contacts/duplicates?${params.toString()}`, {
+    headers: headers(token),
+    cache: "no-store",
+  });
+  const data = await parseJson<{ items: CrmContactDuplicateMatch[] }>(res);
+  return data.items;
+}
+
+export async function addCrmNote(
+  token: string | null,
+  contactId: string,
+  body: string,
+  opts?: { category?: CrmNoteCategory; pinned?: boolean },
+): Promise<CrmNote> {
   const res = await fetch(`/api/crm/contacts/${contactId}/notes`, {
     method: "POST",
     headers: { ...headers(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, category: opts?.category, pinned: opts?.pinned }),
   });
   return parseJson(res);
+}
+
+export async function updateCrmNote(
+  token: string | null,
+  contactId: string,
+  noteId: string,
+  body: { body?: string; category?: CrmNoteCategory; pinned?: boolean },
+): Promise<CrmNote> {
+  const res = await fetch(`/api/crm/contacts/${contactId}/notes/${noteId}`, {
+    method: "PATCH",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson(res);
+}
+
+export async function deleteCrmNote(token: string | null, contactId: string, noteId: string): Promise<void> {
+  const res = await fetch(`/api/crm/contacts/${contactId}/notes/${noteId}`, {
+    method: "DELETE",
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
 }
 
 export async function createCrmFollowUp(

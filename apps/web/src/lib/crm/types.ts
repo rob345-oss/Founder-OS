@@ -89,13 +89,35 @@ export type CrmContactListItem = Pick<
   | "archivedAt"
 >;
 
+export const CRM_NOTE_CATEGORIES = [
+  "general",
+  "meeting",
+  "phone_call",
+  "email",
+  "follow_up",
+  "research",
+  "personal_context",
+  "other",
+] as const;
+
+export type CrmNoteCategory = (typeof CRM_NOTE_CATEGORIES)[number];
+
 export type CrmNote = {
   id: string;
   contactId: string;
   authorUserId: string;
   body: string;
+  category: CrmNoteCategory;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CrmContactDuplicateMatch = {
+  id: string;
+  fullName: string;
+  primaryEmail: string;
+  reason: string;
 };
 
 export type CrmActivity = {
