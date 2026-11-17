@@ -1,0 +1,48 @@
+name: CRM Production Release Gates
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: crm-production-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  crm-production-release-gates:
+    name: CRM production release gates (required)
+    runs-on: ubuntu-latest
+    environment: crm-production-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspaces
+        run: npm install
+
+      - name: CRM reliability unit tests
+        working-directory: apps/web
+        run: npm run test:crm-reliability
+
+      - name: CRM Postgres client audit
+        working-directory: apps/web
+        run: npm run audit:pg-clients
+
+      - name: Require production CRM_DATABASE_URL
+        env:
+          CRM_DATABASE_URL: ${{ secrets.CRM_DATABASE_URL }}
+        run: |
+          if [ -z "$CRM_DATABASE_URL" ]; then
+            echo "::error::CRM_DATABASE_URL is required in GitHub environment crm-production-release"
+            exit 1
+          fi
+
+      - name: Live PostgreSQL TLS integration probe
+        working-directory: apps/web
+        env:
+          CRM_DATABASE_URL: ${{ secrets.CRM_DATABASE_URL }}
+        run: npm run probe:crm-pg

@@ -1,5 +1,13 @@
 import { X509Certificate } from "node:crypto";
-import ConnectionParameters from "pg/lib/connection-parameters.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+// createRequire: pg subpath lacks TS exports under package "exports"
+const ConnectionParameters = require("pg/lib/connection-parameters.js") as new (config: {
+  connectionString: string;
+  connectionTimeoutMillis?: number;
+  ssl?: unknown;
+}) => { ssl: unknown };
 import tls from "node:tls";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -82,6 +90,12 @@ describe("loadTrustAnchors", () => {
 });
 
 describe("buildPgClientConnectionConfig", () => {
+  it("rejects sslmode=no-verify via resolve path", () => {
+    expect(() =>
+      buildPgClientConnectionConfig("postgresql://user:pass@localhost/postgres?sslmode=no-verify"),
+    ).toThrow(/not permitted/);
+  });
+
   it("keeps programmatic SSL after pg parses the connection string", () => {
     const raw =
       "postgresql://postgres.ref:pass@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require";

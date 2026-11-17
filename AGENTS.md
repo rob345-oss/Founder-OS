@@ -106,6 +106,14 @@ Every cross-repository change must end with a short report containing:
 
 If only one repository needs changes, state **why** the other does not. Do not create empty or ceremonial commits in the unaffected repo.
 
+### CRM PostgreSQL reliability (permanent)
+
+- Route **all** CRM/Marketing Postgres access through `apps/web/src/lib/crm/server/pg-client.ts` (`withVerifiedPgClient` / `createVerifiedPgClient`). Never add raw `pg.Client` / `pg.Pool` elsewhere.
+- Forbidden: `rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, `sslmode=no-verify`, or CRM-specific TLS bypass env vars.
+- Keep `pg-connection.ts`, `pg-runtime-guards.ts`, `pg-client.ts`, and `supabase-root-ca-2021.ts` **byte-identical** to `senior-cybersecurity-346/frontend/app/lib/crm/server/` (verify with `npm run verify:crm-pg-parity` in `apps/web`).
+- Before claiming a CRM release is safe: `npm run audit:pg-clients`, `npm run test:studio`, optional `npm run probe:crm-pg` on staging, TG CRM Playwright when secrets exist.
+- Full procedure: `docs/founder-os/CRM-RELIABILITY-SAFEGUARDS.md`.
+
 ### Quick integration checklist (Founder-OS → Titanium Guardian)
 
 - [ ] New or renamed route under `apps/web/src/app/` has a matching route or rewrite in TG `frontend/`

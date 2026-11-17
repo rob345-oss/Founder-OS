@@ -3,9 +3,8 @@
  * Run from apps/web:
  *   npx tsx scripts/test-crm-pg-connect.ts
  */
-import pg from "pg";
-
-import { buildPgClientConnectionConfig } from "../src/lib/crm/server/pg-connection";
+import { buildPgClientConnectionConfig, trustAnchorsIncludeSupabaseRoot2021 } from "../src/lib/crm/server/pg-connection";
+import { createVerifiedPgClient } from "../src/lib/crm/server/pg-client";
 
 const url = process.env.CRM_DATABASE_URL?.trim();
 if (!url) {
@@ -16,8 +15,6 @@ if (!url) {
 const { connectionString, ssl } = buildPgClientConnectionConfig(url);
 const ca = ssl && typeof ssl === "object" && !Array.isArray(ssl) ? ssl.ca : undefined;
 const caCount = Array.isArray(ca) ? ca.length : ca ? 1 : 0;
-const includesSupabaseCa =
-  Array.isArray(ca) && ca.some((pem) => typeof pem === "string" && pem.includes("Supabase Root 2021 CA"));
 
 console.log(
   JSON.stringify({
@@ -25,14 +22,13 @@ console.log(
     sslEnabled: Boolean(ssl),
     rejectUnauthorized: ssl && typeof ssl === "object" ? ssl.rejectUnauthorized : null,
     trustAnchorCount: caCount,
-    includesSupabaseRoot2021: includesSupabaseCa,
+    includesSupabaseRoot2021: trustAnchorsIncludeSupabaseRoot2021(ca),
   }),
 );
 
 async function main() {
-  const client = new pg.Client({ connectionString, ssl, connectionTimeoutMillis: 12_000 });
+  const client = await createVerifiedPgClient(url, { connectionTimeoutMillis: 12_000 });
   try {
-    await client.connect();
     await client.query("SET search_path TO founder_os, public");
     const { rows } = await client.query(
       "SELECT COUNT(*)::int AS contacts FROM crm_contacts WHERE archived_at IS NULL",

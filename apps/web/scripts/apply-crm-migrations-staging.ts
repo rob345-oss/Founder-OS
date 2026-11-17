@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Apply Founder OS CRM SQL migrations to staging Postgres (founder_os schema).
  * Requires CRM_DATABASE_URL or DATABASE_URL with DDL permission.
@@ -6,7 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
+
+import { createVerifiedPgClient } from "../src/lib/crm/server/pg-client";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
@@ -22,30 +23,30 @@ const migrations = [
   "000012_crm_contact_enhancements.sql",
 ];
 
-const url = process.env.CRM_DATABASE_URL ?? process.env.DATABASE_URL;
+const url = process.env.CRM_DATABASE_URL?.trim() ?? process.env.DATABASE_URL?.trim();
 if (!url) {
   console.error("Set CRM_DATABASE_URL or DATABASE_URL before running.");
   process.exit(1);
 }
 
-const connectionString = url.replace(/^postgresql\+asyncpg:/, "postgresql:").replace(/^postgres\+asyncpg:/, "postgres:");
-const client = new pg.Client({ connectionString, connectionTimeoutMillis: 15_000 });
-
 async function main() {
-  await client.connect();
-  for (const file of migrations) {
-    const sqlPath = path.join(repoRoot, "supabase", "migrations", file);
-  if (!fs.existsSync(sqlPath)) {
-    console.error(`Missing migration: ${sqlPath}`);
-    process.exit(1);
+  const client = await createVerifiedPgClient(url, { connectionTimeoutMillis: 15_000 });
+  try {
+    for (const file of migrations) {
+      const sqlPath = path.join(repoRoot, "supabase", "migrations", file);
+      if (!fs.existsSync(sqlPath)) {
+        console.error(`Missing migration: ${sqlPath}`);
+        process.exit(1);
+      }
+      const sql = fs.readFileSync(sqlPath, "utf8");
+      console.log(`Applying ${file}...`);
+      await client.query(sql);
+      console.log(`Applied ${file}`);
+    }
+    console.log("CRM + Marketing migrations complete.");
+  } finally {
+    await client.end().catch(() => undefined);
   }
-    const sql = fs.readFileSync(sqlPath, "utf8");
-    console.log(`Applying ${file}...`);
-    await client.query(sql);
-    console.log(`Applied ${file}`);
-  }
-  await client.end();
-  console.log("CRM + Marketing migrations complete.");
 }
 
 main().catch((e) => {

@@ -9,8 +9,15 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test:studio": "vitest run",
+    "audit:pg-clients": "node scripts/audit-pg-client-usage.mjs",
+    "verify:crm-pg-parity": "node scripts/verify-crm-pg-contract-parity.mjs",
+    "verify:crm-profile-v2": "node scripts/verify-crm-contact-profile-v2-artifact.mjs",
+    "probe:crm-pg": "tsx scripts/crm-pg-integration-probe.ts",
     "crm:probe-email-provider": "node scripts/probe-tg-email-provider.mjs",
-    "crm:apply-migrations": "node scripts/apply-crm-migrations-staging.mjs"
+    "crm:apply-migrations": "tsx scripts/apply-crm-migrations-staging.ts",
+    "crm:audit-marketing-migrations": "tsx scripts/audit-marketing-migrations.ts",
+    "crm:probe-contact-migration": "tsx scripts/probe-crm-contact-migration.ts",
+    "test:crm-reliability": "vitest run src/lib/crm/__tests__/pg-connection.test.ts src/lib/crm/__tests__/pg-runtime-guards.test.ts src/lib/crm/__tests__/pg-client.unit.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -41,6 +48,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
     "vitest": "^5.1.0"
   }
 }
