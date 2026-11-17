@@ -26,6 +26,7 @@ const relPaths = [
   "src/lib/crm/contact-countries.ts",
   "src/lib/crm/social-profiles.ts",
   "src/lib/crm/types.ts",
+  "src/lib/crm/client-api.ts",
   "src/lib/crm/server/contact-payload.ts",
   "src/lib/crm/server/repository.ts",
   "src/lib/crm/server/mappers.ts",
