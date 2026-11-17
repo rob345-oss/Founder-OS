@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import {
+  SocialPostMediaField,
+  postMediaRefs,
+  type PostMediaSlot,
+} from "@/components/marketing/social/media/SocialPostMediaField";
 import { createSocialPost } from "@/lib/marketing/client-api";
 import { zonedLocalToUtc } from "@/lib/marketing/social-calendar";
 import { SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABELS, type SocialPostWithMetrics } from "@/lib/marketing/social-types";
@@ -38,6 +43,7 @@ export function CalendarCreateSheet({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lastId, setLastId] = useState<string | null>(null);
+  const [media, setMedia] = useState<PostMediaSlot[]>([]);
 
   if (!open) return null;
 
@@ -50,6 +56,7 @@ export function CalendarCreateSheet({
         mode === "scheduled"
           ? zonedLocalToUtc(`${scheduleDate}T${scheduleTime}`, timeZone).toISOString()
           : null;
+      if (media.some((m) => m.uploading)) throw new Error("Wait for media uploads to finish.");
       const post = await createSocialPost(token, {
         platform,
         internalLabel: label || null,
@@ -57,6 +64,7 @@ export function CalendarCreateSheet({
         campaignId: campaignId || null,
         status: mode === "scheduled" ? "scheduled" : "draft",
         scheduledAt,
+        mediaRefs: postMediaRefs(media),
       });
       setLastId(post.id);
       onCreated(post);
@@ -124,6 +132,7 @@ export function CalendarCreateSheet({
               ))}
             </select>
           </label>
+          <SocialPostMediaField token={token} platform={platform} value={media} onChange={setMedia} disabled={saving} />
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs text-[var(--studio-text-tertiary)]">
               Date

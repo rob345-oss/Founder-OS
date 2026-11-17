@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireMarketingSuperAdmin } from "@/lib/marketing/guard";
+import { assertPostMediaReady } from "@/lib/marketing/server/social-post-media-guard";
 import {
   SocialPostConcurrencyError,
   deleteSocialPostDraft,
@@ -30,19 +31,29 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const body = (await req.json()) as Record<string, unknown>;
   try {
+    const existing = await getSocialPost(id);
+    if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+    const status =
+      typeof body.status === "string" && (SOCIAL_POST_STATUSES as readonly string[]).includes(body.status)
+        ? (body.status as SocialPostStatus)
+        : undefined;
+    const mediaRefs = Array.isArray(body.mediaRefs) ? body.mediaRefs.map(String) : undefined;
+    await assertPostMediaReady(
+      existing.platform,
+      status ?? existing.status,
+      mediaRefs ?? existing.mediaRefs,
+    );
     const updated = await updateSocialPost(id, {
       internalLabel: typeof body.internalLabel === "string" ? body.internalLabel : undefined,
       bodyText: typeof body.bodyText === "string" ? body.bodyText : undefined,
-      status:
-        typeof body.status === "string" && (SOCIAL_POST_STATUSES as readonly string[]).includes(body.status)
-          ? (body.status as SocialPostStatus)
-          : undefined,
+      status,
       scheduledAt: body.scheduledAt === null ? null : typeof body.scheduledAt === "string" ? body.scheduledAt : undefined,
       publishedAt: body.publishedAt === null ? null : typeof body.publishedAt === "string" ? body.publishedAt : undefined,
       platformPermalink: typeof body.platformPermalink === "string" ? body.platformPermalink : undefined,
       destinationUrl: typeof body.destinationUrl === "string" ? body.destinationUrl : undefined,
       hashtags: typeof body.hashtags === "string" ? body.hashtags : undefined,
       topicTags: Array.isArray(body.topicTags) ? body.topicTags.map(String) : undefined,
+      mediaRefs,
       campaignId: typeof body.campaignId === "string" ? body.campaignId : body.campaignId === null ? null : undefined,
       expectedUpdatedAt: typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
     });

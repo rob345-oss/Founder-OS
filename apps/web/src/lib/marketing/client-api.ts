@@ -6,7 +6,8 @@ import type {
   MarketingOverviewResponse,
   MarketingSettings,
 } from "./types";
-import type { SocialAccount, SocialOverviewResponse, SocialPostWithMetrics } from "./social-types";
+import type { SocialMediaAsset, SocialMediaAssetType } from "./social-media-types";
+import type { SocialAccount, SocialOverviewResponse, SocialPlatformId, SocialPostWithMetrics } from "./social-types";
 
 function headers(token: string | null): HeadersInit {
   const h: HeadersInit = { Accept: "application/json" };
@@ -227,6 +228,114 @@ export async function fetchSocialAccounts(token: string | null): Promise<SocialA
   const res = await fetch("/api/marketing/social/accounts", { headers: headers(token), cache: "no-store" });
   const body = await parseJson<{ items: SocialAccount[] }>(res);
   return body.items;
+}
+
+export type SocialMediaAssetsQuery = {
+  q?: string;
+  assetType?: SocialMediaAssetType;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+  ids?: string[];
+};
+
+export async function fetchSocialMediaAssets(
+  token: string | null,
+  query: SocialMediaAssetsQuery = {},
+): Promise<SocialMediaAsset[]> {
+  if (query.ids?.length) {
+    const loaded: SocialMediaAsset[] = [];
+    for (const id of query.ids) {
+      try {
+        loaded.push(await fetchSocialMediaAsset(token, id));
+      } catch {
+        /* skip missing */
+      }
+    }
+    return loaded;
+  }
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.assetType) params.set("type", query.assetType);
+  if (query.includeArchived) params.set("includeArchived", "1");
+  if (query.limit != null) params.set("limit", String(query.limit));
+  if (query.offset != null) params.set("offset", String(query.offset));
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/marketing/social/media-assets${q}`, { headers: headers(token), cache: "no-store" });
+  const body = await parseJson<{ items: SocialMediaAsset[] }>(res);
+  return body.items;
+}
+
+export async function fetchSocialMediaAsset(
+  token: string | null,
+  id: string,
+  withUsage = false,
+): Promise<SocialMediaAsset> {
+  const q = withUsage ? "?usage=1" : "";
+  const res = await fetch(`/api/marketing/social/media-assets/${id}${q}`, {
+    headers: headers(token),
+    cache: "no-store",
+  });
+  return parseJson(res);
+}
+
+export async function uploadSocialMediaAsset(
+  token: string | null,
+  file: File,
+  meta?: { title?: string; altText?: string },
+): Promise<SocialMediaAsset> {
+  const form = new FormData();
+  form.append("file", file);
+  if (meta?.title) form.append("title", meta.title);
+  if (meta?.altText) form.append("altText", meta.altText);
+  const res = await fetch("/api/marketing/social/media-assets", {
+    method: "POST",
+    headers: headers(token),
+    body: form,
+  });
+  return parseJson(res);
+}
+
+export async function updateSocialMediaAsset(
+  token: string | null,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<SocialMediaAsset> {
+  const res = await fetch(`/api/marketing/social/media-assets/${id}`, {
+    method: "PATCH",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson(res);
+}
+
+export async function archiveSocialMediaAsset(token: string | null, id: string): Promise<SocialMediaAsset> {
+  return updateSocialMediaAsset(token, id, { archive: true });
+}
+
+export async function deleteSocialMediaAsset(token: string | null, id: string, force = false): Promise<void> {
+  const q = force ? "?force=1" : "";
+  const res = await fetch(`/api/marketing/social/media-assets/${id}${q}`, {
+    method: "DELETE",
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    const body = (await res.json()) as { error?: string };
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
+}
+
+export async function validateSocialMediaForPlatform(
+  token: string | null,
+  platform: SocialPlatformId,
+  assetIds: string[],
+): Promise<{ ok: boolean; issues: { code: string; message: string; assetId?: string }[] }> {
+  const res = await fetch("/api/marketing/social/media-assets/validate", {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ platform, assetIds }),
+  });
+  return parseJson(res);
 }
 
 export async function buildSocialTrackedLink(

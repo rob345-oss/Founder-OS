@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 
 import { MarketingModuleScaffold } from "@/components/marketing/MarketingModuleScaffold";
 import { useMarketingSession } from "@/components/marketing/useMarketingSession";
-import { fetchSocialPost, recordSocialPostMetrics, updateSocialPostApi } from "@/lib/marketing/client-api";
+import {
+  SocialPostMediaField,
+  postMediaRefs,
+  type PostMediaSlot,
+} from "@/components/marketing/social/media/SocialPostMediaField";
+import { fetchSocialMediaAssets, fetchSocialPost, recordSocialPostMetrics, updateSocialPostApi } from "@/lib/marketing/client-api";
 import { SOCIAL_PLATFORM_LABELS, type SocialPostMetrics, type SocialPostWithMetrics } from "@/lib/marketing/social-types";
 
 function MetricsSnapshot({
@@ -99,11 +104,41 @@ export default function SocialPostDetailPage() {
   const [shares, setShares] = useState("");
   const [clicks, setClicks] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [media, setMedia] = useState<PostMediaSlot[]>([]);
 
   useEffect(() => {
     if (!token || !id) return;
-    void fetchSocialPost(token, id).then(setPost);
+    void fetchSocialPost(token, id).then(async (p) => {
+      setPost(p);
+      if (!p.mediaRefs.length) {
+        setMedia([]);
+        return;
+      }
+      const assets = await fetchSocialMediaAssets(token, { ids: p.mediaRefs });
+      const map = new Map(assets.map((a) => [a.id, a]));
+      setMedia(
+        p.mediaRefs.map((assetId) => ({
+          assetId,
+          altText: map.get(assetId)?.altText ?? "",
+          asset: map.get(assetId),
+        })),
+      );
+    });
   }, [token, id]);
+
+  async function saveMedia() {
+    if (!token || !id || !post) return;
+    if (media.some((m) => m.uploading)) {
+      setMessage("Wait for uploads to finish.");
+      return;
+    }
+    const updated = await updateSocialPostApi(token, id, {
+      mediaRefs: postMediaRefs(media),
+      expectedUpdatedAt: post.updatedAt,
+    });
+    setPost(updated);
+    setMessage("Media saved");
+  }
 
   async function onMetrics() {
     if (!token || !id) return;
@@ -141,7 +176,12 @@ export default function SocialPostDetailPage() {
       description={`${SOCIAL_PLATFORM_LABELS[post.platform]} · ${post.status.replace(/_/g, " ")} · external: ${post.externalPublishState.replace(/_/g, " ")}`}
     >
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5">
+        <section className="rounded-[var(--studio-radius-lg)] border border-[var(--studio-border)] bg-[var(--studio-bg-2)] p-5 space-y-4">
+          <SocialPostMediaField token={token} platform={post.platform} value={media} onChange={setMedia} />
+          <button type="button" onClick={() => void saveMedia()} className="rounded-md border border-[var(--studio-border)] px-3 py-2 text-xs">
+            Save media attachments
+          </button>
+          {message ? <p className="text-xs text-[var(--studio-success)]">{message}</p> : null}
           <p className="whitespace-pre-wrap text-sm text-[var(--studio-text-primary)]">{post.bodyText || "(No body)"}</p>
           {post.platformPermalink ? (
             <a

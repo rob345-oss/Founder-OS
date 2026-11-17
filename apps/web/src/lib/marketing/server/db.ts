@@ -129,14 +129,20 @@ CREATE TABLE IF NOT EXISTS marketing_social_post_metrics (
 CREATE TABLE IF NOT EXISTS marketing_social_media_assets (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  description TEXT,
+  alt_text TEXT,
   asset_type TEXT NOT NULL,
   storage_url TEXT,
+  storage_key TEXT,
+  original_filename TEXT,
   mime_type TEXT,
   byte_size INTEGER,
   width INTEGER,
   height INTEGER,
   duration_sec INTEGER,
   tags TEXT NOT NULL DEFAULT '[]',
+  upload_state TEXT NOT NULL DEFAULT 'ready',
+  archived_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -166,6 +172,24 @@ CREATE TABLE IF NOT EXISTS marketing_social_audit_events (
 );
 `;
 
+function migrateMarketingSqliteMediaColumns(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(marketing_social_media_assets)").all() as { name: string }[];
+  const names = new Set(cols.map((c) => c.name));
+  const add = (sql: string) => {
+    try {
+      db.exec(sql);
+    } catch {
+      /* column may exist */
+    }
+  };
+  if (!names.has("description")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN description TEXT");
+  if (!names.has("alt_text")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN alt_text TEXT");
+  if (!names.has("storage_key")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN storage_key TEXT");
+  if (!names.has("original_filename")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN original_filename TEXT");
+  if (!names.has("upload_state")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN upload_state TEXT NOT NULL DEFAULT 'ready'");
+  if (!names.has("archived_at")) add("ALTER TABLE marketing_social_media_assets ADD COLUMN archived_at TEXT");
+}
+
 export function newId(): string {
   return crypto.randomUUID();
 }
@@ -186,6 +210,7 @@ export function getMarketingSqlite(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SQLITE_SCHEMA);
+  migrateMarketingSqliteMediaColumns(db);
   const settings = db.prepare("SELECT id FROM marketing_settings WHERE id = 'default'").get();
   if (!settings) {
     db.prepare(
@@ -221,6 +246,7 @@ export function resetMarketingSqliteForTests(dbPath: string): Database.Database 
   const db = new Database(dbPath);
   db.pragma("foreign_keys = ON");
   db.exec(SQLITE_SCHEMA);
+  migrateMarketingSqliteMediaColumns(db);
   sqliteInstance = db;
   return db;
 }
