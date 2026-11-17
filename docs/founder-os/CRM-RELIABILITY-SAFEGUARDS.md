@@ -51,6 +51,21 @@ Titanium Guardian `PR Checks` adds the same audit, unit tests, optional live pro
 
 **Vercel Deployment Checks:** configure in the Vercel project to require the GitHub checks above before promoting to production. Gates are not “active” until branch protection and Vercel both reference them.
 
+### GitHub environments (required for release gates)
+
+Create these environments in **both** repositories (Settings → Environments) and attach secrets:
+
+| Environment | Secrets | Used by |
+|-------------|---------|---------|
+| `crm-staging-release` | `CRM_DATABASE_URL`, `STAGING_SUPER_ADMIN_EMAIL`, `STAGING_SUPER_ADMIN_PASSWORD`, `CRM_HEALTH_TOKEN` | `crm-staging-release-gates.yml` |
+| `crm-production-release` | `CRM_DATABASE_URL`, `PRODUCTION_CRM_SUPER_ADMIN_EMAIL`, `PRODUCTION_CRM_SUPER_ADMIN_PASSWORD`, `CRM_HEALTH_TOKEN` | `crm-production-release-gates.yml` |
+
+Require the release-gate workflows (not optional skips) before merging to `main` / promoting Vercel production.
+
+### Vercel env
+
+Set `CRM_HEALTH_TOKEN` on the Titanium Guardian frontend project for **Preview (staging)** and **Production** (same token value as GitHub environment secret).
+
 ## Production health
 
 `GET /api/crm/health` (Founder-OS and TG deployments):
